@@ -1,0 +1,53 @@
+
+openapi: 3.0.3
+info:
+  title: SkyHealth Middleware
+  version: 0.1.0
+servers:
+  - url: https://YOUR_DOMAIN
+paths:
+  /kpi/ga4:
+    get:
+      summary: GA4 KPIs normalized
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: property_id
+          schema: { type: string }
+        - in: query
+          name: top_limit
+          schema: { type: integer, default: 10 }
+      responses:
+        '200':
+          description: OK
+  /kpi/social:
+    get:
+      summary: Social KPIs normalized
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: handles
+          schema: { type: string, example: "ig:1784...,yt:UCxxx,tt:biz_123" }
+      responses:
+        '200': { description: OK }
+  /prospects:
+    get:
+      summary: Prospects list
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: market
+          schema: { type: string, example: "El Paso" }
+        - in: query
+          name: service
+          schema: { type: string, example: "pediatrics" }
+        - in: query
+          name: limit
+          schema: { type: integer, example: 25 }
+      responses:
+        '200': { description: OK }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
