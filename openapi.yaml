@@ -6,6 +6,7 @@ info:
 servers:
   - url: https://skyhealth-media-ga4.onrender.com
 
+
 paths:
   /kpi/ga4:
     get:
