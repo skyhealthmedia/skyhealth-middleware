@@ -1,55 +1,143 @@
-
-openapi: 3.0.3
+openapi: 3.1.0
 info:
-  title: SkyHealth Middleware
-  version: 0.1.0
+  title: SkyHealth Middleware API
+  version: "0.1.0"
+  description: >
+    GA4 + Social KPI endpoints for SkyHealth Media agent.
+
 servers:
   - url: https://skyhealth-media-ga4.onrender.com
 
-
 paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
   /kpi/ga4:
     get:
-      summary: GA4 KPIs normalized
-      security: [{ bearerAuth: [] }]
+      operationId: getGa4Kpis
+      summary: Get GA4 KPIs (sessions/users + top pages)
+      security:
+        - bearerAuth: []
       parameters:
         - in: query
           name: property_id
-          schema: { type: string }
+          description: Numeric GA4 Property ID (optional if set in server env)
+          schema:
+            type: string
         - in: query
           name: top_limit
-          schema: { type: integer, default: 10 }
+          description: Max number of top pages
+          schema:
+            type: integer
+            default: 10
       responses:
-        '200':
-          description: OK
+        "200":
+          description: GA4 KPI payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: object
+                    properties:
+                      7d: { type: integer }
+                      28d: { type: integer }
+                  users:
+                    type: object
+                    properties:
+                      7d: { type: integer }
+                      28d: { type: integer }
+                  top_pages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path: { type: string }
+                        pv: { type: integer }
+                        sessions: { type: integer }
+                  events:
+                    type: array
+                    items: { type: object }
+                  conversions:
+                    type: array
+                    items: { type: object }
+        "401":
+          description: Missing or invalid bearer token
+
   /kpi/social:
     get:
-      summary: Social KPIs normalized
-      security: [{ bearerAuth: [] }]
+      operationId: getSocialKpis
+      summary: Get social KPIs (Instagram/YouTube/TikTok when configured)
+      security:
+        - bearerAuth: []
       parameters:
         - in: query
           name: handles
-          schema: { type: string, example: "ig:1784...,yt:UCxxx,tt:biz_123" }
+          description: Comma-separated handles like "ig:1784...,yt:UCxxxx,tt:biz_123"
+          schema:
+            type: string
       responses:
-        '200': { description: OK }
+        "200":
+          description: Social KPI payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "401":
+          description: Missing or invalid bearer token
+
   /prospects:
     get:
-      summary: Prospects list
-      security: [{ bearerAuth: [] }]
+      operationId: listProspects
+      summary: Get sample prospects (demo data)
+      security:
+        - bearerAuth: []
       parameters:
         - in: query
           name: market
-          schema: { type: string, example: "El Paso" }
+          schema: { type: string }
         - in: query
           name: service
-          schema: { type: string, example: "pediatrics" }
+          schema: { type: string }
         - in: query
           name: limit
-          schema: { type: integer, example: 25 }
+          schema: { type: integer, default: 25 }
       responses:
-        '200': { description: OK }
+        "200":
+          description: Prospects list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    website: { type: string, nullable: true }
+                    instagram: { type: string, nullable: true }
+                    last_post_days: { type: integer, nullable: true }
+                    notes: { type: string }
+        "401":
+          description: Missing or invalid bearer token
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
+  schemas: {}
+
