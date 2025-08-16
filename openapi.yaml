@@ -2,8 +2,7 @@ openapi: 3.1.0
 info:
   title: SkyHealth Middleware API
   version: "0.1.0"
-  description: >
-    GA4 + Social KPI endpoints for SkyHealth Media agent.
+  description: GA4 + Social KPI endpoints for SkyHealth Media agent.
 
 servers:
   - url: https://skyhealth-media-ga4.onrender.com
@@ -19,10 +18,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
+                $ref: '#/components/schemas/HealthResponse'
 
   /kpi/ga4:
     get:
@@ -33,47 +29,19 @@ paths:
       parameters:
         - in: query
           name: property_id
-          description: Numeric GA4 Property ID (optional if set in server env)
-          schema:
-            type: string
+          description: Numeric GA4 Property ID (optional if set on server)
+          schema: { type: string }
         - in: query
           name: top_limit
           description: Max number of top pages
-          schema:
-            type: integer
-            default: 10
+          schema: { type: integer, default: 10 }
       responses:
         "200":
           description: GA4 KPI payload
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  sessions:
-                    type: object
-                    properties:
-                      7d: { type: integer }
-                      28d: { type: integer }
-                  users:
-                    type: object
-                    properties:
-                      7d: { type: integer }
-                      28d: { type: integer }
-                  top_pages:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path: { type: string }
-                        pv: { type: integer }
-                        sessions: { type: integer }
-                  events:
-                    type: array
-                    items: { type: object }
-                  conversions:
-                    type: array
-                    items: { type: object }
+                $ref: '#/components/schemas/Ga4KpiResponse'
         "401":
           description: Missing or invalid bearer token
 
@@ -87,16 +55,14 @@ paths:
         - in: query
           name: handles
           description: Comma-separated handles like "ig:1784...,yt:UCxxxx,tt:biz_123"
-          schema:
-            type: string
+          schema: { type: string }
       responses:
         "200":
           description: Social KPI payload
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: '#/components/schemas/SocialKpiResponse'
         "401":
           description: Missing or invalid bearer token
 
@@ -124,13 +90,7 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    name: { type: string }
-                    website: { type: string, nullable: true }
-                    instagram: { type: string, nullable: true }
-                    last_post_days: { type: integer, nullable: true }
-                    notes: { type: string }
+                  $ref: '#/components/schemas/Prospect'
         "401":
           description: Missing or invalid bearer token
 
@@ -139,5 +99,72 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-  schemas: {}
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
 
+    Ga4KpiResponse:
+      type: object
+      properties:
+        sessions:
+          type: object
+          properties:
+            7d: { type: integer }
+            28d: { type: integer }
+        users:
+          type: object
+          properties:
+            7d: { type: integer }
+            28d: { type: integer }
+        top_pages:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              pv: { type: integer }
+              sessions: { type: integer }
+        events:
+          type: array
+          items: { type: object }
+        conversions:
+          type: array
+          items: { type: object }
+
+    SocialKpiResponse:
+      type: object
+      description: May include any of the listed platform objects if configured.
+      properties:
+        instagram:
+          type: object
+          nullable: true
+          properties:
+            username: { type: string, nullable: true }
+            followers: { type: integer, nullable: true }
+            media_count: { type: integer, nullable: true }
+        youtube:
+          type: object
+          nullable: true
+          properties:
+            title: { type: string, nullable: true }
+            subs: { type: integer, nullable: true }
+            views: { type: integer, nullable: true }
+            videos: { type: integer, nullable: true }
+        tiktok:
+          type: object
+          nullable: true
+          properties:
+            note: { type: string, nullable: true }
+      additionalProperties: true
+
+    Prospect:
+      type: object
+      properties:
+        name: { type: string }
+        website: { type: string, nullable: true }
+        instagram: { type: string, nullable: true }
+        last_post_days: { type: integer, nullable: true }
+        notes: { type: string }
