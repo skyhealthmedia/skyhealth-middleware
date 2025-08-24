@@ -7,7 +7,7 @@ import path from 'path';
 
 import { ENV } from './env';
 import { ga4Handler } from './svc_ga4';
-import { getSocialKPI } from './svc_social'; // <-- updated import
+import { getSocialKPI } from './svc_social'; // ✅ now matches svc_social.ts export
 
 const app = Fastify({ logger: true });
 
@@ -40,14 +40,10 @@ async function buildApp() {
     }
   });
 
+  // GA4 endpoint
   app.get('/kpi/ga4', ga4Handler);
 
   // --- /kpi/social (Instagram/Facebook via Graph API) ---
-  // Query params:
-  //   platform=instagram|facebook
-  //   accountId=<IG User ID or FB Page ID>
-  //   accessToken=<Graph API token>  (optional if ENV.FB_GRAPH_TOKEN is set)
-  //   postLimit=<number>             (optional; default 50)
   app.get('/kpi/social', async (req, reply) => {
     try {
       const q = req.query as Record<string, unknown>;
@@ -60,18 +56,24 @@ async function buildApp() {
       const postLimit = q.postLimit ? Number(q.postLimit) : 50;
 
       if (!platformRaw || (platformRaw !== 'instagram' && platformRaw !== 'facebook')) {
-        return reply.code(400).send({ error: 'invalid_platform', detail: "Use 'instagram' or 'facebook'." });
+        return reply
+          .code(400)
+          .send({ error: 'invalid_platform', detail: "Use 'instagram' or 'facebook'." });
       }
       if (!accountId) {
-        return reply.code(400).send({ error: 'missing_accountId', detail: 'Provide ?accountId=' });
+        return reply
+          .code(400)
+          .send({ error: 'missing_accountId', detail: 'Provide ?accountId=' });
       }
       if (!accessToken) {
         return reply.code(400).send({
           error: 'missing_accessToken',
-          detail: 'Provide ?accessToken= or set ENV.FB_GRAPH_TOKEN / ENV.GRAPH_ACCESS_TOKEN',
+          detail:
+            'Provide ?accessToken= or set ENV.FB_GRAPH_TOKEN / ENV.GRAPH_ACCESS_TOKEN',
         });
       }
 
+      // ✅ Now calls the function exported from svc_social.ts
       const data = await getSocialKPI(
         {
           platform: platformRaw as 'instagram' | 'facebook',
@@ -84,10 +86,13 @@ async function buildApp() {
       return reply.send(data);
     } catch (err: any) {
       req.log.error(err);
-      return reply.code(500).send({ error: 'social_kpi_failed', detail: err?.message || String(err) });
+      return reply
+        .code(500)
+        .send({ error: 'social_kpi_failed', detail: err?.message || String(err) });
     }
   });
 
+  // Demo prospects
   app.get('/prospects', async (req, reply) => {
     const q = req.query as any;
     const market = String(q.market || 'El Paso');
@@ -95,9 +100,27 @@ async function buildApp() {
     const limit = Number(q.limit || 25);
 
     const sample = [
-      { name: 'Sunrise Pediatrics', website: 'https://example.com', instagram: '@sunrisepeds', last_post_days: 3, notes: 'Active on IG' },
-      { name: 'Healthy Kids Clinic', website: null, instagram: null, last_post_days: null, notes: 'Website only' },
-      { name: 'GI Care Associates', website: 'https://gi-care.example', instagram: '@gicare', last_post_days: 10, notes: 'Potential outreach' },
+      {
+        name: 'Sunrise Pediatrics',
+        website: 'https://example.com',
+        instagram: '@sunrisepeds',
+        last_post_days: 3,
+        notes: 'Active on IG',
+      },
+      {
+        name: 'Healthy Kids Clinic',
+        website: null,
+        instagram: null,
+        last_post_days: null,
+        notes: 'Website only',
+      },
+      {
+        name: 'GI Care Associates',
+        website: 'https://gi-care.example',
+        instagram: '@gicare',
+        last_post_days: 10,
+        notes: 'Potential outreach',
+      },
     ];
 
     const results = sample
@@ -121,4 +144,3 @@ async function start() {
 }
 
 start();
-
