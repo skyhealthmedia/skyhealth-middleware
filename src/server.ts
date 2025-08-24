@@ -7,7 +7,7 @@ import path from 'path';
 
 import { ENV } from './env';
 import { ga4Handler } from './svc_ga4';
-import { socialHandler } from './svc_social';
+import { getSocialKPI } from './svc_social'; // <-- updated import
 
 const app = Fastify({ logger: true });
 
@@ -41,7 +41,52 @@ async function buildApp() {
   });
 
   app.get('/kpi/ga4', ga4Handler);
-  app.get('/kpi/social', socialHandler);
+
+  // --- /kpi/social (Instagram/Facebook via Graph API) ---
+  // Query params:
+  //   platform=instagram|facebook
+  //   accountId=<IG User ID or FB Page ID>
+  //   accessToken=<Graph API token>  (optional if ENV.FB_GRAPH_TOKEN is set)
+  //   postLimit=<number>             (optional; default 50)
+  app.get('/kpi/social', async (req, reply) => {
+    try {
+      const q = req.query as Record<string, unknown>;
+      const platformRaw = String(q.platform || '');
+      const accountId = String(q.accountId || '');
+      const accessToken =
+        String(q.accessToken || '') ||
+        String((ENV as any).FB_GRAPH_TOKEN || (ENV as any).GRAPH_ACCESS_TOKEN || '');
+
+      const postLimit = q.postLimit ? Number(q.postLimit) : 50;
+
+      if (!platformRaw || (platformRaw !== 'instagram' && platformRaw !== 'facebook')) {
+        return reply.code(400).send({ error: 'invalid_platform', detail: "Use 'instagram' or 'facebook'." });
+      }
+      if (!accountId) {
+        return reply.code(400).send({ error: 'missing_accountId', detail: 'Provide ?accountId=' });
+      }
+      if (!accessToken) {
+        return reply.code(400).send({
+          error: 'missing_accessToken',
+          detail: 'Provide ?accessToken= or set ENV.FB_GRAPH_TOKEN / ENV.GRAPH_ACCESS_TOKEN',
+        });
+      }
+
+      const data = await getSocialKPI(
+        {
+          platform: platformRaw as 'instagram' | 'facebook',
+          accessToken,
+          accountId,
+        },
+        { postLimit }
+      );
+
+      return reply.send(data);
+    } catch (err: any) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'social_kpi_failed', detail: err?.message || String(err) });
+    }
+  });
 
   app.get('/prospects', async (req, reply) => {
     const q = req.query as any;
@@ -55,10 +100,9 @@ async function buildApp() {
       { name: 'GI Care Associates', website: 'https://gi-care.example', instagram: '@gicare', last_post_days: 10, notes: 'Potential outreach' },
     ];
 
-    const results = sample.slice(0, Math.max(1, Math.min(limit, sample.length))).map(r => ({
-      ...r,
-      notes: `${r.notes} • ${service} • ${market}`
-    }));
+    const results = sample
+      .slice(0, Math.max(1, Math.min(limit, sample.length)))
+      .map((r) => ({ ...r, notes: `${r.notes} • ${service} • ${market}` }));
 
     reply.send(results);
   });
@@ -77,3 +121,4 @@ async function start() {
 }
 
 start();
+
