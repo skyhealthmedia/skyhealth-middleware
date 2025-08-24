@@ -48,14 +48,22 @@ paths:
   /kpi/social:
     get:
       operationId: getSocialKpis
-      summary: Get social KPIs (Instagram/YouTube/TikTok when configured)
+      summary: Get social KPIs (Instagram/YouTube/TikTok/Facebook when configured)
       security:
         - bearerAuth: []
       parameters:
         - in: query
+          name: platform
+          description: Social platform to query (instagram | facebook | youtube | tiktok)
+          required: true
+          schema:
+            type: string
+            enum: [instagram, facebook, youtube, tiktok]
+        - in: query
           name: handles
-          description: Comma-separated handles like "ig:1784...,yt:UCxxxx,tt:biz_123"
-          schema: { type: string }
+          description: Comma-separated handles or IDs, e.g. "1784...,UCxxxx,biz_123"
+          schema:
+            type: string
       responses:
         "200":
           description: Social KPI payload
@@ -145,6 +153,13 @@ components:
             username: { type: string, nullable: true }
             followers: { type: integer, nullable: true }
             media_count: { type: integer, nullable: true }
+        facebook:
+          type: object
+          nullable: true
+          properties:
+            page_name: { type: string, nullable: true }
+            followers: { type: integer, nullable: true }
+            likes: { type: integer, nullable: true }
         youtube:
           type: object
           nullable: true
