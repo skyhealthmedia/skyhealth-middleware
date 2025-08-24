@@ -1,167 +1,270 @@
 // src/svc_social.ts
-import { FastifyRequest, FastifyReply } from 'fastify';
-import { google } from 'googleapis';
-import { ENV } from './env';
+// Strict, typed social KPI service for Instagram & Facebook
+// - Fixes TS7006 ("a/b implicitly any") by typing all comparators
+// - Normalizes IG/FB posts into a single SocialPost shape
+// - Returns account-level + per-post like_count/comments_count
 
-type J = any;
-const toNum = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0)) || 0;
-const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+// -------------------- Types --------------------
 
-function parseHandles(raw: string): Record<string, string> {
-  const entries = String(raw || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-    .map(s => {
-      const i = s.indexOf(':');
-      if (i === -1) return [s.toLowerCase(), ''] as const;
-      const k = s.slice(0, i).trim().toLowerCase();
-      const v = s.slice(i + 1).trim();
-      return [k, v] as const;
-    });
-  return Object.fromEntries(entries);
+export type Platform = "instagram" | "facebook";
+
+export interface ServiceConfig {
+  platform: Platform;
+  accessToken: string;   // Graph API token
+  accountId: string;     // IG User ID (for Instagram) or Page ID (for Facebook)
+  graphBaseUrl?: string; // override for testing; defaults to https://graph.facebook.com/v19.0
 }
 
-async function fetchJson(url: string, init?: RequestInit): Promise<J> {
-  const r = await fetch(url, init);
-  if (!r.ok) {
-    const body = await r.text().catch(() => '');
-    throw new Error(`${r.status} ${r.statusText} – ${body}`);
+export interface SocialPost {
+  id: string;
+  platform: Platform;
+  caption?: string;          // IG: caption; FB: message
+  media_type?: string;       // IG only
+  media_url?: string;        // IG only
+  permalink: string;
+  created_time: string;      // ISO string
+  like_count: number;        // IG: like_count; FB: reactions.summary.total_count
+  comments_count: number;    // IG: comments_count; FB: comments.summary.total_count
+}
+
+export interface AccountSummary {
+  platform: Platform;
+  account_id: string;
+  username?: string;        // IG
+  name?: string;            // FB Page name
+  followers?: number;       // IG only
+  media_count?: number;     // IG only
+  fan_count?: number;       // FB only: page fans
+}
+
+export interface SocialKPI {
+  account: AccountSummary;
+  posts: SocialPost[];
+  top_by_likes: SocialPost[];
+  top_by_comments: SocialPost[];
+  latest_first: SocialPost[];
+}
+
+// -------------------- Helpers --------------------
+
+async function fetchJSON<T>(url: string): Promise<T> {
+  const res = await fetch(url, { method: "GET" });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Fetch failed (${res.status}): ${text || res.statusText}`);
   }
-  return r.json() as any;
+  return res.json() as Promise<T>;
 }
 
-export async function socialHandler(req: FastifyRequest, reply: FastifyReply) {
-  const q = req.query as any;
-  const handles = parseHandles(q.handles || '');
-  const postsLimit = clamp(Number(q.posts_limit || 5), 1, 25);
+function safeNum(value: unknown, fallback = 0): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
 
-  const out: Record<string, any> = {};
+function sortByLikesDesc(a: SocialPost, b: SocialPost): number {
+  return b.like_count - a.like_count;
+}
+function sortByCommentsDesc(a: SocialPost, b: SocialPost): number {
+  return b.comments_count - a.comments_count;
+}
+function sortByDateDesc(a: SocialPost, b: SocialPost): number {
+  return new Date(b.created_time).getTime() - new Date(a.created_time).getTime();
+}
 
-  // ===================== Instagram (Meta Graph) =====================
-  if (handles.ig && ENV.META_ACCESS_TOKEN) {
-    try {
-      // Account-level
-      const igInfoUrl =
-        `https://graph.facebook.com/v19.0/${encodeURIComponent(handles.ig)}` +
-        `?fields=username,followers_count,media_count&access_token=${encodeURIComponent(ENV.META_ACCESS_TOKEN!)}`;
-      const igInfo = await fetchJson(igInfoUrl);
-      out.instagram = {
-        username: igInfo?.username ?? null,
-        followers: toNum(igInfo?.followers_count),
-        media_count: toNum(igInfo?.media_count),
-      };
+// -------------------- Instagram --------------------
 
-      // Recent posts (likes/comments)
-      const igMediaUrl =
-        `https://graph.facebook.com/v19.0/${encodeURIComponent(handles.ig)}` +
-        `/media?fields=id,caption,media_type,permalink,timestamp,like_count,comments_count` +
-        `&limit=${postsLimit}&access_token=${encodeURIComponent(ENV.META_ACCESS_TOKEN!)}`;
-      const igMedia = await fetchJson(igMediaUrl);
-      const ig_posts = Array.isArray(igMedia?.data)
-        ? igMedia.data.map((m: any) => ({
-            id: m?.id ?? null,
-            media_type: m?.media_type ?? null,
-            caption: m?.caption ?? null,
-            permalink: m?.permalink ?? null,
-            timestamp: m?.timestamp ?? null,
-            like_count: toNum(m?.like_count),
-            comments_count: toNum(m?.comments_count),
-          }))
-        : [];
+type IGAccountResp = {
+  id: string;
+  username: string;
+  media_count?: number;
+  followers_count?: number;
+};
 
-      const igLikesAvg = ig_posts.length
-        ? Math.round(ig_posts.reduce((a, b) => a + (b.like_count || 0), 0) / ig_posts.length)
-        : 0;
-      const igCommentsAvg = ig_posts.length
-        ? Math.round(ig_posts.reduce((a, b) => a + (b.comments_count || 0), 0) / ig_posts.length)
-        : 0;
-      const igTop = ig_posts.slice().sort((a, b) => (b.like_count || 0) - (a.like_count || 0))[0] || null;
+type IGMediaResp = {
+  data: Array<{
+    id: string;
+    caption?: string;
+    media_type?: string;
+    media_url?: string;
+    permalink: string;
+    timestamp: string;
+    like_count?: number;
+    comments_count?: number;
+  }>;
+  paging?: { next?: string };
+};
 
-      out.ig_posts = ig_posts;
-      out.ig_summary = {
-        posts_looked_at: ig_posts.length,
-        avg_likes: igLikesAvg,
-        avg_comments: igCommentsAvg,
-        top_post: igTop
-          ? {
-              id: igTop.id,
-              permalink: igTop.permalink,
-              like_count: igTop.like_count,
-              comments_count: igTop.comments_count,
-            }
-          : null,
-      };
-    } catch (e: any) {
-      req.log.error({ msg: 'instagram_fetch_error', err: String(e) });
+async function getInstagramAccountSummary(
+  cfg: ServiceConfig
+): Promise<AccountSummary> {
+  const base = cfg.graphBaseUrl ?? "https://graph.facebook.com/v19.0";
+  // followers_count requires the IG user to be a business account + permissions
+  const fields = ["id", "username", "media_count", "followers_count"].join(",");
+  const url = `${base}/${cfg.accountId}?fields=${fields}&access_token=${cfg.accessToken}`;
+
+  const json = await fetchJSON<IGAccountResp>(url);
+  return {
+    platform: "instagram",
+    account_id: json.id,
+    username: json.username,
+    followers: safeNum(json.followers_count, undefined as unknown as number),
+    media_count: safeNum(json.media_count, undefined as unknown as number)
+  };
+}
+
+async function getInstagramPosts(cfg: ServiceConfig, limit = 50): Promise<SocialPost[]> {
+  const base = cfg.graphBaseUrl ?? "https://graph.facebook.com/v19.0";
+  const fields = [
+    "id",
+    "caption",
+    "media_type",
+    "media_url",
+    "permalink",
+    "timestamp",
+    "like_count",
+    "comments_count"
+  ].join(",");
+
+  let url = `${base}/${cfg.accountId}/media?fields=${fields}&access_token=${cfg.accessToken}&limit=${Math.min(
+    limit,
+    100
+  )}`;
+
+  const out: SocialPost[] = [];
+
+  while (url && out.length < limit) {
+    const page = await fetchJSON<IGMediaResp>(url);
+    for (const m of page.data ?? []) {
+      if (out.length >= limit) break;
+      out.push({
+        id: m.id,
+        platform: "instagram",
+        caption: m.caption,
+        media_type: m.media_type,
+        media_url: m.media_url,
+        permalink: m.permalink,
+        created_time: m.timestamp,
+        like_count: safeNum(m.like_count),
+        comments_count: safeNum(m.comments_count)
+      });
     }
+    url = page.paging?.next ?? "";
   }
 
-  // ===================== Facebook Page (Meta Graph) =====================
-  if (handles.fb && ENV.META_ACCESS_TOKEN) {
-    try {
-      // Page info
-      const fbInfoUrl =
-        `https://graph.facebook.com/v19.0/${encodeURIComponent(handles.fb)}` +
-        `?fields=name,fan_count&access_token=${encodeURIComponent(ENV.META_ACCESS_TOKEN!)}`;
-      const fbInfo = await fetchJson(fbInfoUrl);
-      out.facebook = {
-        name: fbInfo?.name ?? null,
-        fans: toNum(fbInfo?.fan_count),
-      };
-
-      // Recent posts with reactions/comments summaries
-      // Note: for Pages, per-post "likes" are via reactions summary; comments via comments summary.
-      const fbPostsUrl =
-        `https://graph.facebook.com/v19.0/${encodeURIComponent(handles.fb)}` +
-        `/posts?fields=id,permalink_url,message,created_time,shares,` +
-        `reactions.summary(true).limit(0),comments.summary(true).limit(0)` +
-        `&limit=${postsLimit}&access_token=${encodeURIComponent(ENV.META_ACCESS_TOKEN!)}`;
-      const fbPosts = await fetchJson(fbPostsUrl);
-
-      const fb_posts = Array.isArray(fbPosts?.data)
-        ? fbPosts.data.map((p: any) => ({
-            id: p?.id ?? null,
-            message: p?.message ?? null,
-            permalink_url: p?.permalink_url ?? null,
-            created_time: p?.created_time ?? null,
-            reactions_count: toNum(p?.reactions?.summary?.total_count),
-            comments_count: toNum(p?.comments?.summary?.total_count),
-            shares_count: toNum(p?.shares?.count),
-          }))
-        : [];
-
-      const fbLikesAvg = fb_posts.length
-        ? Math.round(fb_posts.reduce((a, b) => a + (b.reactions_count || 0), 0) / fb_posts.length)
-        : 0;
-      const fbCommentsAvg = fb_posts.length
-        ? Math.round(fb_posts.reduce((a, b) => a + (b.comments_count || 0), 0) / fb_posts.length)
-        : 0;
-      const fbTop = fb_posts.slice().sort((a, b) => (b.reactions_count || 0) - (a.reactions_count || 0))[0] || null;
-
-      out.fb_posts = fb_posts;
-      out.fb_summary = {
-        posts_looked_at: fb_posts.length,
-        avg_reactions: fbLikesAvg,
-        avg_comments: fbCommentsAvg,
-        top_post: fbTop
-          ? {
-              id: fbTop.id,
-              permalink_url: fbTop.permalink_url,
-              reactions_count: fbTop.reactions_count,
-              comments_count: fbTop.comments_count,
-              shares_count: fbTop.shares_count,
-            }
-          : null,
-      };
-    } catch (e: any) {
-      req.log.error({ msg: 'facebook_fetch_error', err: String(e) });
-    }
-  }
-
-  // ===================== (Existing) YouTube / LinkedIn / TikTok placeholders =====================
-  // Keep your previous code here if you already had YT/LI/TT wired.
-  // This response focuses on IG/FB post-level metrics requested.
-
-  return reply.send(out);
+  return out;
 }
+
+// -------------------- Facebook --------------------
+
+type FBPageResp = {
+  id: string;
+  name?: string;
+  fan_count?: number;
+};
+
+type FBPostsResp = {
+  data: Array<{
+    id: string;
+    message?: string;
+    created_time: string;
+    permalink_url: string;
+    reactions?: { summary?: { total_count?: number } };
+    comments?: { summary?: { total_count?: number } };
+  }>;
+  paging?: { next?: string };
+};
+
+async function getFacebookAccountSummary(
+  cfg: ServiceConfig
+): Promise<AccountSummary> {
+  const base = cfg.graphBaseUrl ?? "https://graph.facebook.com/v19.0";
+  const fields = ["id", "name", "fan_count"].join(",");
+  const url = `${base}/${cfg.accountId}?fields=${fields}&access_token=${cfg.accessToken}`;
+
+  const json = await fetchJSON<FBPageResp>(url);
+  return {
+    platform: "facebook",
+    account_id: json.id,
+    name: json.name,
+    fan_count: safeNum(json.fan_count, undefined as unknown as number)
+  };
+}
+
+async function getFacebookPosts(cfg: ServiceConfig, limit = 50): Promise<SocialPost[]> {
+  const base = cfg.graphBaseUrl ?? "https://graph.facebook.com/v19.0";
+  // Using summary=true avoids paging through edges to count totals
+  const fields = [
+    "id",
+    "message",
+    "created_time",
+    "permalink_url",
+    "reactions.summary(total_true).limit(0)",
+    "comments.summary(true).limit(0)"
+  ].join(",");
+
+  let url = `${base}/${cfg.accountId}/posts?fields=${fields}&access_token=${cfg.accessToken}&limit=${Math.min(
+    limit,
+    100
+  )}`;
+
+  const out: SocialPost[] = [];
+
+  while (url && out.length < limit) {
+    const page = await fetchJSON<FBPostsResp>(url);
+    for (const p of page.data ?? []) {
+      if (out.length >= limit) break;
+      out.push({
+        id: p.id,
+        platform: "facebook",
+        caption: p.message,
+        permalink: p.permalink_url,
+        created_time: p.created_time,
+        like_count: safeNum(p.reactions?.summary?.total_count),
+        comments_count: safeNum(p.comments?.summary?.total_count)
+      });
+    }
+    url = page.paging?.next ?? "";
+  }
+
+  return out;
+}
+
+// -------------------- Public API --------------------
+
+export async function getSocialKPI(
+  cfg: ServiceConfig,
+  options?: { postLimit?: number }
+): Promise<SocialKPI> {
+  const postLimit = options?.postLimit ?? 50;
+
+  let account: AccountSummary;
+  let posts: SocialPost[];
+
+  if (cfg.platform === "instagram") {
+    [account, posts] = await Promise.all([
+      getInstagramAccountSummary(cfg),
+      getInstagramPosts(cfg, postLimit)
+    ]);
+  } else if (cfg.platform === "facebook") {
+    [account, posts] = await Promise.all([
+      getFacebookAccountSummary(cfg),
+      getFacebookPosts(cfg, postLimit)
+    ]);
+  } else {
+    throw new Error(`Unsupported platform: ${cfg.platform}`);
+  }
+
+  // Derived rankings — comparators are fully typed (no TS7006)
+  const top_by_likes = [...posts].sort(sortByLikesDesc).slice(0, 10);
+  const top_by_comments = [...posts].sort(sortByCommentsDesc).slice(0, 10);
+  const latest_first = [...posts].sort(sortByDateDesc);
+
+  return { account, posts, top_by_likes, top_by_comments, latest_first };
+}
+
+// Example thin route-level handler (optional):
+// export async function handleSocialKpiRequest(req: Request): Promise<Response> {
+//   const { platform, accessToken, accountId } = await req.json();
+//   const data = await getSocialKPI({ platform, accessToken, accountId });
+//   return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+// }
