@@ -1,25 +1,16 @@
 // src/svc_social.ts
-import fetch from "node-fetch"; // For Node <18; if Node >=18, you can remove this and use global fetch
+import fetch from "node-fetch"; // remove if using Node >=18 with native fetch
 
-/**
- * Input type for getSocialKPI
- */
 export interface SocialKPIRequest {
   platform: "instagram" | "facebook";
   accountId: string;
   accessToken: string;
 }
 
-/**
- * Options (e.g., limit number of posts)
- */
 export interface SocialKPIOptions {
   postLimit?: number;
 }
 
-/**
- * Response shape (matches openapi.json SocialKpiResponse)
- */
 export interface SocialKPIResponse {
   instagram?: {
     username?: string;
@@ -33,10 +24,6 @@ export interface SocialKPIResponse {
   };
 }
 
-/**
- * Fetches KPIs from Instagram or Facebook Graph API.
- * This is called by /kpi/social in server.ts.
- */
 export async function getSocialKPI(
   req: SocialKPIRequest,
   opts: SocialKPIOptions = {}
@@ -46,13 +33,12 @@ export async function getSocialKPI(
 
   try {
     if (platform === "instagram") {
-      // Example IG Graph API call
       const url = `https://graph.facebook.com/v18.0/${accountId}?fields=username,followers_count,media_count&access_token=${accessToken}`;
       const resp = await fetch(url);
       if (!resp.ok) {
         throw new Error(`Instagram API error ${resp.status}`);
       }
-      const data = await resp.json();
+      const data: any = await resp.json(); // <-- FIXED
 
       return {
         instagram: {
@@ -64,13 +50,12 @@ export async function getSocialKPI(
     }
 
     if (platform === "facebook") {
-      // Example FB Graph API call
       const url = `https://graph.facebook.com/v18.0/${accountId}?fields=name,followers_count,fan_count&access_token=${accessToken}`;
       const resp = await fetch(url);
       if (!resp.ok) {
         throw new Error(`Facebook API error ${resp.status}`);
       }
-      const data = await resp.json();
+      const data: any = await resp.json(); // <-- FIXED
 
       return {
         facebook: {
@@ -87,3 +72,4 @@ export async function getSocialKPI(
     throw err;
   }
 }
+
