@@ -135,9 +135,11 @@ async function start() {
     await buildApp();
     const PORT = Number(process.env.PORT || 8080);
 
-    // ✅ Force Fastify to bind to 127.0.0.1 for Windows compatibility
-    await app.listen({ port: PORT, host: '127.0.0.1' });
-    app.log.info(`Server listening on http://127.0.0.1:${PORT}`);
+    // ✅ Use 127.0.0.1 locally, 0.0.0.0 on Render
+    const HOST = process.env.RENDER ? '0.0.0.0' : '127.0.0.1';
+
+    await app.listen({ port: PORT, host: HOST });
+    app.log.info(`Server listening on http://${HOST}:${PORT}`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
@@ -145,3 +147,4 @@ async function start() {
 }
 
 start();
+
