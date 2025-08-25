@@ -44,7 +44,8 @@ export async function getSocialKPI(
   }
 
   if (platform === "facebook") {
-    const fbFields = `id,name,fan_count,followers_count,posts.limit(${postLimit}){id,message,permalink_url,created_time,likes.summary(true),comments.summary(true)}`;
+    // ✅ Safe fields only
+    const fbFields = `id,name,fan_count,posts.limit(${postLimit}){id,message,permalink_url,created_time}`;
 
     const resp = await fetch(
       `https://graph.facebook.com/v18.0/${accountId}?fields=${encodeURIComponent(
@@ -61,15 +62,13 @@ export async function getSocialKPI(
     return {
       facebook: {
         page_name: data.name ?? null,
-        followers: data.followers_count ?? data.fan_count ?? 0,
+        followers: data.fan_count ?? 0,
         likes: data.fan_count ?? 0,
         posts: (data.posts?.data || []).map((p: any) => ({
           id: p.id,
           message: p.message ?? null,
           permalink_url: p.permalink_url ?? null,
           created_time: p.created_time ?? null,
-          like_count: p.likes?.summary?.total_count ?? 0,
-          comments_count: p.comments?.summary?.total_count ?? 0,
         })),
       },
     };
@@ -77,4 +76,3 @@ export async function getSocialKPI(
 
   throw new Error(`Unsupported platform: ${platform}`);
 }
-
