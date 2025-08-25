@@ -19,11 +19,13 @@ export async function getSocialKPI(
       )}&access_token=${accessToken}`
     );
 
-    if (!resp.ok) {
-      throw new Error(`Instagram account API error ${resp.status}`);
-    }
-
     const data: any = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(
+        `Instagram API error ${resp.status}: ${JSON.stringify(data)}`
+      );
+    }
 
     return {
       instagram: {
@@ -44,7 +46,6 @@ export async function getSocialKPI(
   }
 
   if (platform === "facebook") {
-    // ✅ Safe fields only
     const fbFields = `id,name,fan_count,posts.limit(${postLimit}){id,message,permalink_url,created_time}`;
 
     const resp = await fetch(
@@ -53,11 +54,13 @@ export async function getSocialKPI(
       )}&access_token=${accessToken}`
     );
 
-    if (!resp.ok) {
-      throw new Error(`Facebook account API error ${resp.status}`);
-    }
-
     const data: any = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(
+        `Facebook API error ${resp.status}: ${JSON.stringify(data)}`
+      );
+    }
 
     return {
       facebook: {
