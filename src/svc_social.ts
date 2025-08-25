@@ -1,118 +1,80 @@
-// src/svc_social.ts
-import fetch from "node-fetch"; // Remove if Node >=18 (use global fetch)
+import fetch from "node-fetch";
 
-export interface SocialKPIRequest {
+export interface SocialKpiOptions {
   platform: "instagram" | "facebook";
   accountId: string;
   accessToken: string;
 }
 
-export interface SocialKPIOptions {
-  postLimit?: number;
-}
-
-export interface SocialKPIResponse {
-  instagram?: {
-    username?: string;
-    followers?: number;
-    media_count?: number;
-    posts?: Array<{
-      id: string;
-      caption?: string;
-      media_url?: string;
-      permalink?: string;
-      like_count?: number;
-      comments_count?: number;
-      timestamp?: string;
-    }>;
-  };
-  facebook?: {
-    page_name?: string;
-    followers?: number;
-    likes?: number;
-    posts?: Array<{
-      id: string;
-      message?: string;
-      permalink_url?: string;
-      like_count?: number;
-      comments_count?: number;
-      created_time?: string;
-    }>;
-  };
-}
-
 export async function getSocialKPI(
-  req: SocialKPIRequest,
-  opts: SocialKPIOptions = {}
-): Promise<SocialKPIResponse> {
-  const { platform, accountId, accessToken } = req;
-  const { postLimit = 5 } = opts;
+  { platform, accountId, accessToken }: SocialKpiOptions,
+  { postLimit = 5 }: { postLimit?: number } = {}
+) {
+  if (platform === "instagram") {
+    const igFields = `username,followers_count,media_count,media.limit(${postLimit}){id,caption,media_url,permalink,like_count,comments_count,timestamp}`;
 
-  try {
-    if (platform === "instagram") {
-      // --- Account info ---
-      const accountUrl = `https://graph.facebook.com/v18.0/${accountId}?fields=username,followers_count,media_count&access_token=${accessToken}`;
-      const accountResp = await fetch(accountUrl);
-      if (!accountResp.ok) throw new Error(`Instagram account API error ${accountResp.status}`);
-      const accountData: any = await accountResp.json();
+    const resp = await fetch(
+      `https://graph.facebook.com/v18.0/${accountId}?fields=${encodeURIComponent(
+        igFields
+      )}&access_token=${accessToken}`
+    );
 
-      // --- Recent posts ---
-      const postsUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_url,permalink,like_count,comments_count,timestamp&limit=${postLimit}&access_token=${accessToken}`;
-      const postsResp = await fetch(postsUrl);
-      if (!postsResp.ok) throw new Error(`Instagram posts API error ${postsResp.status}`);
-      const postsData: any = await postsResp.json();
-
-      return {
-        instagram: {
-          username: accountData.username,
-          followers: accountData.followers_count,
-          media_count: accountData.media_count,
-          posts: (postsData.data || []).map((p: any) => ({
-            id: p.id,
-            caption: p.caption,
-            media_url: p.media_url,
-            permalink: p.permalink,
-            like_count: p.like_count,
-            comments_count: p.comments_count,
-            timestamp: p.timestamp,
-          })),
-        },
-      };
+    if (!resp.ok) {
+      throw new Error(`Instagram account API error ${resp.status}`);
     }
 
-    if (platform === "facebook") {
-      // --- Page info ---
-      const accountUrl = `https://graph.facebook.com/v18.0/${accountId}?fields=name,followers_count,fan_count&access_token=${accessToken}`;
-      const accountResp = await fetch(accountUrl);
-      if (!accountResp.ok) throw new Error(`Facebook account API error ${accountResp.status}`);
-      const accountData: any = await accountResp.json();
+    const data: any = await resp.json();
 
-      // --- Recent posts ---
-      const postsUrl = `https://graph.facebook.com/v18.0/${accountId}/posts?fields=id,message,permalink_url,created_time,likes.summary(true),comments.summary(true)&limit=${postLimit}&access_token=${accessToken}`;
-      const postsResp = await fetch(postsUrl);
-      if (!postsResp.ok) throw new Error(`Facebook posts API error ${postsResp.status}`);
-      const postsData: any = await postsResp.json();
-
-      return {
-        facebook: {
-          page_name: accountData.name,
-          followers: accountData.followers_count,
-          likes: accountData.fan_count,
-          posts: (postsData.data || []).map((p: any) => ({
-            id: p.id,
-            message: p.message,
-            permalink_url: p.permalink_url,
-            created_time: p.created_time,
-            like_count: p.likes?.summary?.total_count ?? 0,
-            comments_count: p.comments?.summary?.total_count ?? 0,
-          })),
-        },
-      };
-    }
-
-    throw new Error(`Unsupported platform: ${platform}`);
-  } catch (err: any) {
-    console.error("Error in getSocialKPI:", err);
-    throw err;
+    return {
+      instagram: {
+        username: data.username ?? null,
+        followers: data.followers_count ?? 0,
+        media_count: data.media_count ?? 0,
+        posts: (data.media?.data || []).map((m: any) => ({
+          id: m.id,
+          caption: m.caption ?? null,
+          media_url: m.media_url ?? null,
+          permalink: m.permalink ?? null,
+          like_count: m.like_count ?? 0,
+          comments_count: m.comments_count ?? 0,
+          timestamp: m.timestamp ?? null,
+        })),
+      },
+    };
   }
+
+  if (platform === "facebook") {
+    const fbFields = `id,name,fan_count,followers_count,posts.limit(${postLimit}){id,message,permalink_url,created_time,likes.summary(true),comments.summary(true)}`;
+
+    const resp = await fetch(
+      `https://graph.facebook.com/v18.0/${accountId}?fields=${encodeURIComponent(
+        fbFields
+      )}&access_token=${accessToken}`
+    );
+
+    if (!resp.ok) {
+      throw new Error(`Facebook account API error ${resp.status}`);
+    }
+
+    const data: any = await resp.json();
+
+    return {
+      facebook: {
+        page_name: data.name ?? null,
+        followers: data.followers_count ?? data.fan_count ?? 0,
+        likes: data.fan_count ?? 0,
+        posts: (data.posts?.data || []).map((p: any) => ({
+          id: p.id,
+          message: p.message ?? null,
+          permalink_url: p.permalink_url ?? null,
+          created_time: p.created_time ?? null,
+          like_count: p.likes?.summary?.total_count ?? 0,
+          comments_count: p.comments?.summary?.total_count ?? 0,
+        })),
+      },
+    };
+  }
+
+  throw new Error(`Unsupported platform: ${platform}`);
 }
+
