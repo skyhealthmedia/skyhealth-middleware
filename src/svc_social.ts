@@ -46,12 +46,37 @@ export async function getSocialKPI(
   }
 
   if (platform === "facebook") {
+    // Step 1: Get Page Access Token dynamically
+    const accountsResp = await fetch(
+      `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}`
+    );
+    const accountsData: any = await accountsResp.json();
+
+    if (!accountsResp.ok) {
+      throw new Error(
+        `Failed to fetch Page accounts: ${JSON.stringify(accountsData)}`
+      );
+    }
+
+    const page = (accountsData.data || []).find(
+      (p: any) => p.id === accountId
+    );
+
+    if (!page || !page.access_token) {
+      throw new Error(
+        `No Page access token found for accountId=${accountId}`
+      );
+    }
+
+    const pageAccessToken = page.access_token;
+
+    // Step 2: Fetch Page data using Page Access Token
     const fbFields = `id,name,fan_count,posts.limit(${postLimit}){id,message,permalink_url,created_time}`;
 
     const resp = await fetch(
       `https://graph.facebook.com/v18.0/${accountId}?fields=${encodeURIComponent(
         fbFields
-      )}&access_token=${accessToken}`
+      )}&access_token=${pageAccessToken}`
     );
 
     const data: any = await resp.json();
