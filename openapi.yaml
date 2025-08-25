@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SkyHealth Middleware API
-  version: "0.1.0"
+  version: "0.2.0"
   description: GA4 + Social KPI endpoints for SkyHealth Media agent.
 
 servers:
@@ -48,22 +48,28 @@ paths:
   /kpi/social:
     get:
       operationId: getSocialKpis
-      summary: Get social KPIs (Instagram/YouTube/TikTok/Facebook when configured)
+      summary: Get social KPIs (Instagram/YouTube/TikTok when configured)
       security:
         - bearerAuth: []
       parameters:
         - in: query
           name: platform
-          description: Social platform to query (instagram | facebook | youtube | tiktok)
+          description: Platform ("instagram" | "facebook")
           required: true
-          schema:
-            type: string
-            enum: [instagram, facebook, youtube, tiktok]
+          schema: { type: string }
         - in: query
-          name: handles
-          description: Comma-separated handles or IDs, e.g. "1784...,UCxxxx,biz_123"
-          schema:
-            type: string
+          name: accountId
+          description: Instagram User ID or Facebook Page ID
+          required: true
+          schema: { type: string }
+        - in: query
+          name: accessToken
+          description: Graph API access token (optional if ENV provides)
+          schema: { type: string }
+        - in: query
+          name: postLimit
+          description: Number of recent posts to fetch
+          schema: { type: integer, default: 5 }
       responses:
         "200":
           description: Social KPI payload
@@ -144,36 +150,45 @@ components:
 
     SocialKpiResponse:
       type: object
-      description: May include any of the listed platform objects if configured.
+      description: Social KPIs for Instagram or Facebook
       properties:
         instagram:
           type: object
           nullable: true
           properties:
-            username: { type: string, nullable: true }
-            followers: { type: integer, nullable: true }
-            media_count: { type: integer, nullable: true }
+            username: { type: string }
+            followers: { type: integer }
+            media_count: { type: integer }
+            posts:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  caption: { type: string, nullable: true }
+                  media_url: { type: string, nullable: true }
+                  permalink: { type: string, nullable: true }
+                  like_count: { type: integer, nullable: true }
+                  comments_count: { type: integer, nullable: true }
+                  timestamp: { type: string, nullable: true }
         facebook:
           type: object
           nullable: true
           properties:
-            page_name: { type: string, nullable: true }
-            followers: { type: integer, nullable: true }
-            likes: { type: integer, nullable: true }
-        youtube:
-          type: object
-          nullable: true
-          properties:
-            title: { type: string, nullable: true }
-            subs: { type: integer, nullable: true }
-            views: { type: integer, nullable: true }
-            videos: { type: integer, nullable: true }
-        tiktok:
-          type: object
-          nullable: true
-          properties:
-            note: { type: string, nullable: true }
-      additionalProperties: true
+            page_name: { type: string }
+            followers: { type: integer }
+            likes: { type: integer }
+            posts:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  message: { type: string, nullable: true }
+                  permalink_url: { type: string, nullable: true }
+                  created_time: { type: string, nullable: true }
+                  like_count: { type: integer, nullable: true }
+                  comments_count: { type: integer, nullable: true }
 
     Prospect:
       type: object
