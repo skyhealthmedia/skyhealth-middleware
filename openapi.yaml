@@ -8,53 +8,16 @@ servers:
   - url: https://skyhealth-media-ga4.onrender.com
 
 paths:
-  /health:
-    get:
-      operationId: getHealth
-      summary: Health check
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-
-  /kpi/ga4:
-    get:
-      operationId: getGa4Kpis
-      summary: Get GA4 KPIs (sessions/users + top pages)
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: query
-          name: property_id
-          description: Numeric GA4 Property ID (optional if set on server)
-          schema: { type: string }
-        - in: query
-          name: top_limit
-          description: Max number of top pages
-          schema: { type: integer, default: 10 }
-      responses:
-        "200":
-          description: GA4 KPI payload
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Ga4KpiResponse'
-        "401":
-          description: Missing or invalid bearer token
-
   /kpi/social:
     get:
       operationId: getSocialKpis
-      summary: Get social KPIs (Instagram/YouTube/TikTok when configured)
+      summary: Get social KPIs (Instagram/Facebook)
       security:
         - bearerAuth: []
       parameters:
         - in: query
           name: platform
-          description: Platform ("instagram" | "facebook")
+          description: Platform ("instagram" or "facebook")
           required: true
           schema: { type: string }
         - in: query
@@ -63,13 +26,9 @@ paths:
           required: true
           schema: { type: string }
         - in: query
-          name: accessToken
-          description: Graph API access token (optional if ENV provides)
-          schema: { type: string }
-        - in: query
           name: postLimit
-          description: Number of recent posts to fetch
-          schema: { type: integer, default: 5 }
+          description: Number of posts to fetch (default 5)
+          schema: { type: integer }
       responses:
         "200":
           description: Social KPI payload
@@ -79,86 +38,27 @@ paths:
                 $ref: '#/components/schemas/SocialKpiResponse'
         "401":
           description: Missing or invalid bearer token
-
-  /prospects:
-    get:
-      operationId: listProspects
-      summary: Get sample prospects (demo data)
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: query
-          name: market
-          schema: { type: string }
-        - in: query
-          name: service
-          schema: { type: string }
-        - in: query
-          name: limit
-          schema: { type: integer, default: 25 }
-      responses:
-        "200":
-          description: Prospects list
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Prospect'
-        "401":
-          description: Missing or invalid bearer token
+        "500":
+          description: Social KPI fetch failed
 
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
+
   schemas:
-    HealthResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-
-    Ga4KpiResponse:
-      type: object
-      properties:
-        sessions:
-          type: object
-          properties:
-            7d: { type: integer }
-            28d: { type: integer }
-        users:
-          type: object
-          properties:
-            7d: { type: integer }
-            28d: { type: integer }
-        top_pages:
-          type: array
-          items:
-            type: object
-            properties:
-              path: { type: string }
-              pv: { type: integer }
-              sessions: { type: integer }
-        events:
-          type: array
-          items: { type: object }
-        conversions:
-          type: array
-          items: { type: object }
-
     SocialKpiResponse:
       type: object
-      description: Social KPIs for Instagram or Facebook
+      description: May include either instagram or facebook object.
       properties:
         instagram:
           type: object
           nullable: true
           properties:
-            username: { type: string }
-            followers: { type: integer }
-            media_count: { type: integer }
+            username: { type: string, nullable: true }
+            followers: { type: integer, nullable: true }
+            media_count: { type: integer, nullable: true }
             posts:
               type: array
               items:
@@ -170,14 +70,14 @@ components:
                   permalink: { type: string, nullable: true }
                   like_count: { type: integer, nullable: true }
                   comments_count: { type: integer, nullable: true }
-                  timestamp: { type: string, nullable: true }
+                  timestamp: { type: string, format: date-time, nullable: true }
         facebook:
           type: object
           nullable: true
           properties:
-            page_name: { type: string }
-            followers: { type: integer }
-            likes: { type: integer }
+            page_name: { type: string, nullable: true }
+            followers: { type: integer, nullable: true }
+            likes: { type: integer, nullable: true }
             posts:
               type: array
               items:
@@ -186,15 +86,8 @@ components:
                   id: { type: string }
                   message: { type: string, nullable: true }
                   permalink_url: { type: string, nullable: true }
-                  created_time: { type: string, nullable: true }
+                  created_time: { type: string, format: date-time, nullable: true }
                   like_count: { type: integer, nullable: true }
                   comments_count: { type: integer, nullable: true }
+      additionalProperties: true
 
-    Prospect:
-      type: object
-      properties:
-        name: { type: string }
-        website: { type: string, nullable: true }
-        instagram: { type: string, nullable: true }
-        last_post_days: { type: integer, nullable: true }
-        notes: { type: string }
