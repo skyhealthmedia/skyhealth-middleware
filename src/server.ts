@@ -7,7 +7,7 @@ import path from 'path';
 
 import { ENV } from './env';
 import { ga4Handler } from './svc_ga4';
-import { getSocialKPI } from './svc_social'; // ✅ now matches svc_social.ts export
+import { getSocialKPI } from './svc_social';
 
 const app = Fastify({ logger: true });
 
@@ -73,7 +73,6 @@ async function buildApp() {
         });
       }
 
-      // ✅ Now calls the function exported from svc_social.ts
       const data = await getSocialKPI(
         {
           platform: platformRaw as 'instagram' | 'facebook',
@@ -135,8 +134,10 @@ async function start() {
   try {
     await buildApp();
     const PORT = Number(process.env.PORT || 8080);
-    await app.listen({ port: PORT, host: '0.0.0.0' });
-    app.log.info(`Server listening on :${PORT}`);
+
+    // ✅ Force Fastify to bind to 127.0.0.1 for Windows compatibility
+    await app.listen({ port: PORT, host: '127.0.0.1' });
+    app.log.info(`Server listening on http://127.0.0.1:${PORT}`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
