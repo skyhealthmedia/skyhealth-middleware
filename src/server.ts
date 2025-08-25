@@ -1,121 +1,178 @@
-// src/svc_social.ts
-import fetch from "node-fetch"; // Node 18+ has global fetch, but this is safe
+// src/server.ts
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
+import fs from 'fs';
+import path from 'path';
 
-// Request interface
-export interface SocialKPIRequest {
-  platform: "instagram" | "facebook";
-  accountId: string;
-  accessToken: string;
+import { ENV } from './env';
+import { getSocialKPI } from './svc_social';
+let ga4Handler: any = null;
+
+// Try to import GA4 handler safely
+try {
+  const ga4Module = require('./svc_ga4');
+  ga4Handler = ga4Module.ga4Handler;
+} catch (err) {
+  console.warn("⚠️ GA4 handler not available. GA4 endpoint will be disabled.", err);
 }
 
-// Options
-export interface SocialKPIOptions {
-  postLimit?: number;
+const app = Fastify({ logger: true });
+
+async function buildApp() {
+  // --- Debugging startup ---
+  console.log("✅ Server starting with ENV:", {
+    PORT: process.env.PORT,
+    AGENT_BEARER: process.env.AGENT_BEARER ? "set" : "MISSING",
+    META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN ? "set" : "MISSING",
+    GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS || "not set"
+  });
+
+  // --- Plugins ---
+  await app.register(cors, { origin: true });
+  await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+
+  // --- Auth hook (skip public routes) ---
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.url.startsWith('/health') || req.url.startsWith('/openapi.yaml')) return;
+    const auth = req.headers.authorization || '';
+    const token = auth.replace(/^Bearer\s+/i, '').trim();
+    if (!ENV.AGENT_BEARER || token !== ENV.AGENT_BEARER) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+  });
+
+  // --- Routes ---
+  app.get('/health', async () => ({ ok: true }));
+
+  app.get('/openapi.yaml', async (req, reply) => {
+    try {
+      const specPath = path.join(__dirname, '..', 'openapi.yaml');
+      const text = fs.readFileSync(specPath, 'utf8');
+      reply.type('text/yaml').send(text);
+    } catch (e: any) {
+      req.log.error(e);
+      reply.code(500).send({ error: 'spec_not_found' });
+    }
+  });
+
+  // --- GA4 endpoint (optional) ---
+  if (ga4Handler) {
+    app.get('/kpi/ga4', ga4Handler);
+  } else {
+    app.get('/kpi/ga4', async (req, reply) => {
+      return reply.code(501).send({ error: "GA4_not_configured" });
+    });
+  }
+
+  // --- /kpi/social (Instagram/Facebook via Graph API) ---
+  app.get('/kpi/social', async (req, reply) => {
+    try {
+      const q = req.query as Record<string, unknown>;
+      const platformRaw = String(q.platform || '');
+      const accountId = String(q.accountId || '');
+
+      // ✅ Now also checks ENV.META_ACCESS_TOKEN
+      const accessToken =
+        String(q.accessToken || '') ||
+        String(
+          (ENV as any).FB_GRAPH_TOKEN ||
+          (ENV as any).GRAPH_ACCESS_TOKEN ||
+          (ENV as any).META_ACCESS_TOKEN ||
+          ''
+        );
+
+      const postLimit = q.postLimit ? Number(q.postLimit) : 50;
+
+      if (!platformRaw || (platformRaw !== 'instagram' && platformRaw !== 'facebook')) {
+        return reply
+          .code(400)
+          .send({ error: 'invalid_platform', detail: "Use 'instagram' or 'facebook'." });
+      }
+      if (!accountId) {
+        return reply
+          .code(400)
+          .send({ error: 'missing_accountId', detail: 'Provide ?accountId=' });
+      }
+      if (!accessToken) {
+        return reply.code(400).send({
+          error: 'missing_accessToken',
+          detail:
+            'Provide ?accessToken= or set ENV.FB_GRAPH_TOKEN / ENV.GRAPH_ACCESS_TOKEN / ENV.META_ACCESS_TOKEN',
+        });
+      }
+
+      const data = await getSocialKPI(
+        {
+          platform: platformRaw as 'instagram' | 'facebook',
+          accessToken,
+          accountId,
+        },
+        { postLimit }
+      );
+
+      return reply.send(data);
+    } catch (err: any) {
+      req.log.error(err);
+      return reply
+        .code(500)
+        .send({ error: 'social_kpi_failed', detail: err?.message || String(err) });
+    }
+  });
+
+  // Demo prospects
+  app.get('/prospects', async (req, reply) => {
+    const q = req.query as any;
+    const market = String(q.market || 'El Paso');
+    const service = String(q.service || 'pediatrics');
+    const limit = Number(q.limit || 25);
+
+    const sample = [
+      {
+        name: 'Sunrise Pediatrics',
+        website: 'https://example.com',
+        instagram: '@sunrisepeds',
+        last_post_days: 3,
+        notes: 'Active on IG',
+      },
+      {
+        name: 'Healthy Kids Clinic',
+        website: null,
+        instagram: null,
+        last_post_days: null,
+        notes: 'Website only',
+      },
+      {
+        name: 'GI Care Associates',
+        website: 'https://gi-care.example',
+        instagram: '@gicare',
+        last_post_days: 10,
+        notes: 'Potential outreach',
+      },
+    ];
+
+    const results = sample
+      .slice(0, Math.max(1, Math.min(limit, sample.length)))
+      .map((r) => ({ ...r, notes: `${r.notes} • ${service} • ${market}` }));
+
+    reply.send(results);
+  });
 }
 
-// Response interface
-export interface SocialKPIResponse {
-  instagram?: {
-    username?: string;
-    followers?: number;
-    media_count?: number;
-    posts?: Array<{
-      id: string;
-      caption?: string;
-      media_url?: string;
-      permalink?: string;
-      like_count?: number;
-      comments_count?: number;
-      timestamp?: string;
-    }>;
-  };
-  facebook?: {
-    page_name?: string;
-    followers?: number;
-    likes?: number;
-    posts?: Array<{
-      id: string;
-      message?: string;
-      permalink_url?: string;
-      created_time?: string;
-      like_count?: number;
-      comments_count?: number;
-    }>;
-  };
-}
-
-export async function getSocialKPI(
-  req: SocialKPIRequest,
-  opts: SocialKPIOptions = {}
-): Promise<SocialKPIResponse> {
-  const { platform, accountId, accessToken } = req;
-  const { postLimit = 5 } = opts;
-
+async function start() {
   try {
-    if (platform === "instagram") {
-      // --- Account info ---
-      const accountUrl = `https://graph.facebook.com/v18.0/${accountId}?fields=username,followers_count,media_count&access_token=${accessToken}`;
-      const accountResp = await fetch(accountUrl);
-      if (!accountResp.ok) throw new Error(`Instagram account API error ${accountResp.status}`);
-      const accountData: any = await accountResp.json();
+    await buildApp();
+    const PORT = Number(process.env.PORT || 8080);
 
-      // --- Recent posts ---
-      const postsUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_url,permalink,like_count,comments_count,timestamp&limit=${postLimit}&access_token=${accessToken}`;
-      const postsResp = await fetch(postsUrl);
-      if (!postsResp.ok) throw new Error(`Instagram posts API error ${postsResp.status}`);
-      const postsData: any = await postsResp.json();
+    // ✅ Use 127.0.0.1 locally, 0.0.0.0 on Render
+    const HOST = process.env.RENDER ? '0.0.0.0' : '127.0.0.1';
 
-      return {
-        instagram: {
-          username: accountData.username,
-          followers: accountData.followers_count,
-          media_count: accountData.media_count,
-          posts: (postsData.data || []).map((p: any) => ({
-            id: p.id,
-            caption: p.caption,
-            media_url: p.media_url,
-            permalink: p.permalink,
-            like_count: p.like_count ?? 0,
-            comments_count: p.comments_count ?? 0,
-            timestamp: p.timestamp,
-          })),
-        },
-      };
-    }
-
-    if (platform === "facebook") {
-      // --- Page info ---
-      const accountUrl = `https://graph.facebook.com/v18.0/${accountId}?fields=name,followers_count,fan_count&access_token=${accessToken}`;
-      const accountResp = await fetch(accountUrl);
-      if (!accountResp.ok) throw new Error(`Facebook account API error ${accountResp.status}`);
-      const accountData: any = await accountResp.json();
-
-      // --- Recent posts ---
-      const postsUrl = `https://graph.facebook.com/v18.0/${accountId}/posts?fields=id,message,permalink_url,created_time,likes.summary(true),comments.summary(true)&limit=${postLimit}&access_token=${accessToken}`;
-      const postsResp = await fetch(postsUrl);
-      if (!postsResp.ok) throw new Error(`Facebook posts API error ${postsResp.status}`);
-      const postsData: any = await postsResp.json();
-
-      return {
-        facebook: {
-          page_name: accountData.name,
-          followers: accountData.followers_count,
-          likes: accountData.fan_count,
-          posts: (postsData.data || []).map((p: any) => ({
-            id: p.id,
-            message: p.message ?? null,
-            permalink_url: p.permalink_url ?? null,
-            created_time: p.created_time ?? null,
-            like_count: p.likes && p.likes.summary ? p.likes.summary.total_count : 0,
-            comments_count: p.comments && p.comments.summary ? p.comments.summary.total_count : 0,
-          })),
-        },
-      };
-    }
-
-    throw new Error(`Unsupported platform: ${platform}`);
-  } catch (err: any) {
-    console.error("Error in getSocialKPI:", err);
-    throw err;
+    await app.listen({ port: PORT, host: HOST });
+    app.log.info(`Server listening on http://${HOST}:${PORT}`);
+  } catch (err) {
+    app.log.error(err);
+    process.exit(1);
   }
 }
+
+start();
