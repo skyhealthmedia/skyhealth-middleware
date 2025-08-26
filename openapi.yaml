@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SkyHealth Middleware API
-  version: "0.2.0"
+  version: "0.3.0"
   description: GA4 + Social KPI endpoints for SkyHealth Media agent.
 
 servers:
@@ -54,7 +54,7 @@ paths:
       parameters:
         - in: query
           name: platform
-          description: Platform to query (instagram | facebook)
+          description: Platform to query
           required: true
           schema:
             type: string
@@ -63,12 +63,12 @@ paths:
           name: accountId
           description: >
             Instagram User ID or Facebook Page ID.  
-            If not provided, the server uses defaults from environment:  
-            - Instagram → `${DEFAULT_IG_ID}`  
-            - Facebook → `${DEFAULT_FB_ID}`
+            If omitted, the server automatically uses defaults:  
+            - Instagram → `17841476107371059`  
+            - Facebook → `758804137314076`
           schema:
             type: string
-            default: "17841476107371059"
+            example: "17841476107371059"
         - in: query
           name: postLimit
           description: Max number of posts to fetch
