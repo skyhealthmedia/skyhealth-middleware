@@ -1,234 +1,198 @@
-{
-  "openapi": "3.1.0",
-  "info": {
-    "title": "SkyHealth Middleware API",
-    "version": "0.2.0",
-    "description": "GA4 + Social KPI endpoints for SkyHealth Media agent."
-  },
-  "servers": [
-    { "url": "https://skyhealth-media-ga4.onrender.com" }
-  ],
-  "paths": {
-    "/health": {
-      "get": {
-        "operationId": "getHealth",
-        "summary": "Health check",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HealthResponse" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/kpi/ga4": {
-      "get": {
-        "operationId": "getGa4Kpis",
-        "summary": "Get GA4 KPIs (sessions/users + top pages)",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "in": "query",
-            "name": "property_id",
-            "schema": { "type": "string" },
-            "description": "Numeric GA4 Property ID (optional if set on server)"
-          },
-          {
-            "in": "query",
-            "name": "top_limit",
-            "schema": { "type": "integer", "default": 10 },
-            "description": "Max number of top pages"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "GA4 KPI payload",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/Ga4KpiResponse" }
-              }
-            }
-          },
-          "401": { "description": "Missing or invalid bearer token" }
-        }
-      }
-    },
-    "/kpi/social": {
-      "get": {
-        "operationId": "getSocialKpis",
-        "summary": "Get social KPIs (Instagram/Facebook)",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "in": "query",
-            "name": "platform",
-            "schema": { "type": "string", "enum": ["instagram", "facebook"] },
-            "required": true,
-            "description": "Platform to query (instagram | facebook)"
-          },
-          {
-            "in": "query",
-            "name": "accountId",
-            "schema": { "type": "string" },
-            "required": true,
-            "description": "Instagram User ID or Facebook Page ID"
-          },
-          {
-            "in": "query",
-            "name": "postLimit",
-            "schema": { "type": "integer", "default": 5 },
-            "description": "Max number of posts to fetch"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Social KPI payload",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/SocialKpiResponse" }
-              }
-            }
-          },
-          "401": { "description": "Missing or invalid bearer token" }
-        }
-      }
-    },
-    "/prospects": {
-      "get": {
-        "operationId": "listProspects",
-        "summary": "Get sample prospects (demo data)",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "in": "query", "name": "market", "schema": { "type": "string" } },
-          { "in": "query", "name": "service", "schema": { "type": "string" } },
-          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 25 } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Prospects list",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": { "$ref": "#/components/schemas/Prospect" }
-                }
-              }
-            }
-          },
-          "401": { "description": "Missing or invalid bearer token" }
-        }
-      }
-    }
-  },
-  "components": {
-    "securitySchemes": {
-      "bearerAuth": {
-        "type": "http",
-        "scheme": "bearer"
-      }
-    },
-    "schemas": {
-      "HealthResponse": {
-        "type": "object",
-        "properties": { "ok": { "type": "boolean" } }
-      },
-      "Ga4KpiResponse": {
-        "type": "object",
-        "properties": {
-          "sessions": {
-            "type": "object",
-            "properties": {
-              "7d": { "type": "integer" },
-              "28d": { "type": "integer" }
-            }
-          },
-          "users": {
-            "type": "object",
-            "properties": {
-              "7d": { "type": "integer" },
-              "28d": { "type": "integer" }
-            }
-          },
-          "top_pages": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "path": { "type": "string" },
-                "pv": { "type": "integer" },
-                "sessions": { "type": "integer" }
-              }
-            }
-          },
-          "events": { "type": "array", "items": { "type": "object" } },
-          "conversions": { "type": "array", "items": { "type": "object" } }
-        }
-      },
-      "SocialKpiResponse": {
-        "type": "object",
-        "properties": {
-          "instagram": {
-            "type": "object",
-            "nullable": true,
-            "properties": {
-              "username": { "type": "string", "nullable": true },
-              "followers": { "type": "integer", "nullable": true },
-              "media_count": { "type": "integer", "nullable": true },
-              "posts": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": { "type": "string" },
-                    "caption": { "type": "string", "nullable": true },
-                    "media_url": { "type": "string", "nullable": true },
-                    "permalink": { "type": "string", "nullable": true },
-                    "like_count": { "type": "integer" },
-                    "comments_count": { "type": "integer" },
-                    "timestamp": { "type": "string", "nullable": true }
-                  }
-                }
-              }
-            }
-          },
-          "facebook": {
-            "type": "object",
-            "nullable": true,
-            "properties": {
-              "page_name": { "type": "string", "nullable": true },
-              "followers": { "type": "integer", "nullable": true },
-              "likes": { "type": "integer", "nullable": true },
-              "posts": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": { "type": "string" },
-                    "message": { "type": "string", "nullable": true },
-                    "permalink_url": { "type": "string", "nullable": true },
-                    "created_time": { "type": "string", "nullable": true }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "additionalProperties": true
-      },
-      "Prospect": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" },
-          "website": { "type": "string", "nullable": true },
-          "instagram": { "type": "string", "nullable": true },
-          "last_post_days": { "type": "integer", "nullable": true },
-          "notes": { "type": "string" }
-        }
-      }
-    }
-  }
-}
+openapi: 3.1.0
+info:
+  title: SkyHealth Middleware API
+  version: "0.2.0"
+  description: GA4 + Social KPI endpoints for SkyHealth Media agent.
+
+servers:
+  - url: https://skyhealth-media-ga4.onrender.com
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /kpi/ga4:
+    get:
+      operationId: getGa4Kpis
+      summary: Get GA4 KPIs (sessions/users + top pages)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: property_id
+          description: Numeric GA4 Property ID (optional if set on server)
+          schema: { type: string }
+        - in: query
+          name: top_limit
+          description: Max number of top pages
+          schema: { type: integer, default: 10 }
+      responses:
+        "200":
+          description: GA4 KPI payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ga4KpiResponse'
+        "401":
+          description: Missing or invalid bearer token
+
+  /kpi/social:
+    get:
+      operationId: getSocialKpis
+      summary: Get social KPIs (Instagram/Facebook)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: platform
+          description: Platform to query (instagram | facebook)
+          required: true
+          schema:
+            type: string
+            enum: [instagram, facebook]
+        - in: query
+          name: accountId
+          description: >
+            Instagram User ID or Facebook Page ID.  
+            If not provided, the server uses defaults from environment:  
+            - Instagram → `${DEFAULT_IG_ID}`  
+            - Facebook → `${DEFAULT_FB_ID}`
+          schema:
+            type: string
+            default: "17841476107371059"
+        - in: query
+          name: postLimit
+          description: Max number of posts to fetch
+          schema:
+            type: integer
+            default: 5
+      responses:
+        "200":
+          description: Social KPI payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialKpiResponse'
+        "401":
+          description: Missing or invalid bearer token
+
+  /prospects:
+    get:
+      operationId: listProspects
+      summary: Get sample prospects (demo data)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: market
+          schema: { type: string }
+        - in: query
+          name: service
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Prospects list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Prospect'
+        "401":
+          description: Missing or invalid bearer token
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+
+    Ga4KpiResponse:
+      type: object
+      properties:
+        sessions:
+          type: object
+          properties:
+            7d: { type: integer }
+            28d: { type: integer }
+        users:
+          type: object
+          properties:
+            7d: { type: integer }
+            28d: { type: integer }
+        top_pages:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              pv: { type: integer }
+              sessions: { type: integer }
+
+    SocialKpiResponse:
+      type: object
+      description: Social KPI results for Instagram or Facebook
+      properties:
+        instagram:
+          type: object
+          nullable: true
+          properties:
+            username: { type: string }
+            followers: { type: integer }
+            media_count: { type: integer }
+            posts:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  caption: { type: string }
+                  media_url: { type: string }
+                  permalink: { type: string }
+                  like_count: { type: integer }
+                  comments_count: { type: integer }
+                  timestamp: { type: string }
+        facebook:
+          type: object
+          nullable: true
+          properties:
+            page_name: { type: string }
+            followers: { type: integer }
+            likes: { type: integer }
+            posts:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  message: { type: string, nullable: true }
+                  permalink_url: { type: string }
+                  created_time: { type: string }
+
+    Prospect:
+      type: object
+      properties:
+        name: { type: string }
+        website: { type: string, nullable: true }
+        instagram: { type: string, nullable: true }
+        last_post_days: { type: integer, nullable: true }
+        notes: { type: string }
