@@ -60,20 +60,14 @@ async function buildApp() {
           .send({ error: 'invalid_platform', detail: "Use 'instagram' or 'facebook'." });
       }
 
-      // ✅ Default account IDs from .env
+      // ✅ Use defaults if not provided
       let accountId = String(q.accountId || '');
       if (!accountId) {
-        accountId =
-          platformRaw === 'instagram'
-            ? ENV.DEFAULT_IG_ID || ''
-            : ENV.DEFAULT_FB_ID || '';
-      }
-
-      if (!accountId) {
-        return reply.code(400).send({
-          error: 'missing_accountId',
-          detail: 'Provide ?accountId= or set DEFAULT_IG_ID/DEFAULT_FB_ID',
-        });
+        if (platformRaw === 'instagram') {
+          accountId = ENV.DEFAULT_IG_ID || '17841476107371059'; // fallback to SkyHealth IG
+        } else {
+          accountId = ENV.DEFAULT_FB_ID || '758804137314076'; // fallback to SkyHealth FB
+        }
       }
 
       if (!accessToken) {
@@ -153,4 +147,3 @@ async function start() {
 }
 
 start();
-
