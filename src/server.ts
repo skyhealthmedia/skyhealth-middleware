@@ -8,6 +8,7 @@ import path from 'path';
 import { ENV } from './env';
 import { ga4Handler } from './svc_ga4';
 import { getSocialKPI } from './svc_social';
+import clients from './clients';
 
 const app = Fastify({ logger: true });
 
@@ -18,9 +19,16 @@ async function buildApp() {
 
   // --- Auth hook (skip public routes) ---
   app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (req.url.startsWith('/health') || req.url.startsWith('/openapi.yaml')) return;
+    if (
+      req.url.startsWith('/health') ||
+      req.url.startsWith('/openapi.yaml')
+    ) {
+      return;
+    }
+
     const auth = req.headers.authorization || '';
     const token = auth.replace(/^Bearer\s+/i, '').trim();
+
     if (!ENV.AGENT_BEARER || token !== ENV.AGENT_BEARER) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
@@ -40,6 +48,18 @@ async function buildApp() {
     }
   });
 
+  // List registered clients
+  app.get('/clients', async (req: FastifyRequest, reply: FastifyReply) => {
+    const list = Object.entries(clients).map(([id, client]) => ({
+      id,
+      name: client.name,
+      domain: client.domain,
+      ga4_property_id: client.ga4_property_id,
+    }));
+
+    return reply.send(list);
+  });
+
   // GA4 endpoint
   app.get('/kpi/ga4', ga4Handler);
 
@@ -54,19 +74,22 @@ async function buildApp() {
 
       const postLimit = q.postLimit ? Number(q.postLimit) : 50;
 
-      if (!platformRaw || (platformRaw !== 'instagram' && platformRaw !== 'facebook')) {
+      if (
+        !platformRaw ||
+        (platformRaw !== 'instagram' && platformRaw !== 'facebook')
+      ) {
         return reply
           .code(400)
           .send({ error: 'invalid_platform', detail: "Use 'instagram' or 'facebook'." });
       }
 
-      // ✅ Use defaults if not provided
+      // Use defaults if not provided
       let accountId = String(q.accountId || '');
       if (!accountId) {
         if (platformRaw === 'instagram') {
-          accountId = ENV.DEFAULT_IG_ID || '17841476107371059'; // fallback to SkyHealth IG
+          accountId = ENV.DEFAULT_IG_ID || '17841476107371059';
         } else {
-          accountId = ENV.DEFAULT_FB_ID || '758804137314076'; // fallback to SkyHealth FB
+          accountId = ENV.DEFAULT_FB_ID || '758804137314076';
         }
       }
 
