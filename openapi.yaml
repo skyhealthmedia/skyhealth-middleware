@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SkyHealth Middleware API
-  version: "0.3.0"
+  version: "0.4.0"
   description: GA4 + Social KPI endpoints for SkyHealth Media agent.
 
 servers:
@@ -20,6 +20,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
 
+  /clients:
+    get:
+      operationId: listClients
+      summary: List all registered clients
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Client'
+
+        "401":
+          description: Missing or invalid bearer token
+
   /kpi/ga4:
     get:
       operationId: getGa4Kpis
@@ -28,13 +47,23 @@ paths:
         - bearerAuth: []
       parameters:
         - in: query
+          name: client
+          description: Optional client key, for example `skyhealth` or `kernplacepediatrics`
+          schema:
+            type: string
+            example: kernplacepediatrics
+        - in: query
           name: property_id
-          description: Numeric GA4 Property ID (optional if set on server)
-          schema: { type: string }
+          description: Numeric GA4 Property ID (optional if client is provided or a default is set on server)
+          schema:
+            type: string
+            example: "528543159"
         - in: query
           name: top_limit
           description: Max number of top pages
-          schema: { type: integer, default: 10 }
+          schema:
+            type: integer
+            default: 10
       responses:
         "200":
           description: GA4 KPI payload
@@ -62,10 +91,8 @@ paths:
         - in: query
           name: accountId
           description: >
-            Instagram User ID or Facebook Page ID.  
-            If omitted, the server automatically uses defaults:  
-            - Instagram → `17841476107371059`  
-            - Facebook → `758804137314076`
+            Instagram User ID or Facebook Page ID.
+            If omitted, the server automatically uses defaults.
           schema:
             type: string
             example: "17841476107371059"
@@ -94,13 +121,17 @@ paths:
       parameters:
         - in: query
           name: market
-          schema: { type: string }
+          schema:
+            type: string
         - in: query
           name: service
-          schema: { type: string }
+          schema:
+            type: string
         - in: query
           name: limit
-          schema: { type: integer, default: 25 }
+          schema:
+            type: integer
+            default: 25
       responses:
         "200":
           description: Prospects list
@@ -126,27 +157,54 @@ components:
         ok:
           type: boolean
 
+    Client:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        domain:
+          type: string
+        ga4_property_id:
+          type: string
+
     Ga4KpiResponse:
       type: object
       properties:
         sessions:
           type: object
           properties:
-            7d: { type: integer }
-            28d: { type: integer }
+            7d:
+              type: integer
+            28d:
+              type: integer
         users:
           type: object
           properties:
-            7d: { type: integer }
-            28d: { type: integer }
+            7d:
+              type: integer
+            28d:
+              type: integer
         top_pages:
           type: array
           items:
             type: object
             properties:
-              path: { type: string }
-              pv: { type: integer }
-              sessions: { type: integer }
+              path:
+                type: string
+              pv:
+                type: integer
+              sessions:
+                type: integer
+        events:
+          type: array
+          items:
+            type: object
+        conversions:
+          type: array
+          items:
+            type: object
 
     SocialKpiResponse:
       type: object
@@ -156,43 +214,75 @@ components:
           type: object
           nullable: true
           properties:
-            username: { type: string }
-            followers: { type: integer }
-            media_count: { type: integer }
+            username:
+              type: string
+            followers:
+              type: integer
+            media_count:
+              type: integer
             posts:
               type: array
               items:
                 type: object
                 properties:
-                  id: { type: string }
-                  caption: { type: string }
-                  media_url: { type: string }
-                  permalink: { type: string }
-                  like_count: { type: integer }
-                  comments_count: { type: integer }
-                  timestamp: { type: string }
+                  id:
+                    type: string
+                  caption:
+                    type: string
+                    nullable: true
+                  media_url:
+                    type: string
+                    nullable: true
+                  permalink:
+                    type: string
+                    nullable: true
+                  like_count:
+                    type: integer
+                  comments_count:
+                    type: integer
+                  timestamp:
+                    type: string
+                    nullable: true
         facebook:
           type: object
           nullable: true
           properties:
-            page_name: { type: string }
-            followers: { type: integer }
-            likes: { type: integer }
+            page_name:
+              type: string
+            followers:
+              type: integer
+            likes:
+              type: integer
             posts:
               type: array
               items:
                 type: object
                 properties:
-                  id: { type: string }
-                  message: { type: string, nullable: true }
-                  permalink_url: { type: string }
-                  created_time: { type: string }
+                  id:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  permalink_url:
+                    type: string
+                    nullable: true
+                  created_time:
+                    type: string
+                    nullable: true
 
     Prospect:
       type: object
       properties:
-        name: { type: string }
-        website: { type: string, nullable: true }
-        instagram: { type: string, nullable: true }
-        last_post_days: { type: integer, nullable: true }
-        notes: { type: string }
+        name:
+          type: string
+        website:
+          type: string
+          nullable: true
+        instagram:
+          type: string
+          nullable: true
+        last_post_days:
+          type: integer
+          nullable: true
+        notes:
+          type: string
