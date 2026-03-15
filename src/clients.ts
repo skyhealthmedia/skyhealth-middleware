@@ -2,7 +2,7 @@ const clients: Record<string, { name: string; domain: string; ga4_property_id: s
   skyhealth: {
     name: 'SkyHealth Media',
     domain: 'skyhealthmedia.com',
-    ga4_property_id: '501132977',
+    ga4_property_id: '501364602',
   },
   kernplacepediatrics: {
     name: 'Kern Place Pediatrics',
