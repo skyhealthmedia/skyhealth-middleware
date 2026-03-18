@@ -13,10 +13,12 @@ export async function ga4Handler(req: FastifyRequest, reply: FastifyReply) {
   try {
     const q = req.query as any;
 
-    const clientKey = String(q.client || '');
+    const rawClientKey = String(q.client || '').trim().toLowerCase();
+    const clientKey = rawClientKey as keyof typeof clients;
+
     const propertyId = String(
       q.property_id ||
-        (clientKey && clients[clientKey]?.ga4_property_id) ||
+        clients[clientKey]?.ga4_property_id ||
         ENV.GA_PROPERTY_ID ||
         ''
     );
@@ -68,6 +70,8 @@ export async function ga4Handler(req: FastifyRequest, reply: FastifyReply) {
     }));
 
     return reply.send({
+      client: rawClientKey || null,
+      property_id: propertyId,
       sessions: { '7d': t7.sessions, '28d': t28.sessions },
       users: { '7d': t7.users, '28d': t28.users },
       top_pages,
