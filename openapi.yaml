@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SkyHealth Middleware API
-  version: "0.4.0"
+  version: "0.5.0"
   description: GA4 + Social KPI endpoints for SkyHealth Media agent.
 
 servers:
@@ -35,7 +35,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Client'
-
         "401":
           description: Missing or invalid bearer token
 
@@ -48,16 +47,16 @@ paths:
       parameters:
         - in: query
           name: client
-          description: Optional client key, for example `skyhealth` or `kernplacepediatrics`
+          description: Optional client key, for example `skyhealth`, `kernplacepediatrics`, `pediatricgi`, or `vipeds`
           schema:
             type: string
-            example: kernplacepediatrics
+            example: vipeds
         - in: query
           name: property_id
           description: Numeric GA4 Property ID (optional if client is provided or a default is set on server)
           schema:
             type: string
-            example: "528543159"
+            example: "529057672"
         - in: query
           name: top_limit
           description: Max number of top pages
@@ -82,6 +81,12 @@ paths:
         - bearerAuth: []
       parameters:
         - in: query
+          name: client
+          description: Optional client key, for example `skyhealth`, `pediatricgi`, or `vipeds`
+          schema:
+            type: string
+            example: vipeds
+        - in: query
           name: platform
           description: Platform to query
           required: true
@@ -91,8 +96,9 @@ paths:
         - in: query
           name: accountId
           description: >
-            Instagram User ID or Facebook Page ID.
-            If omitted, the server automatically uses defaults.
+            Optional override for Instagram User ID or Facebook Page ID.
+            If omitted and client is provided, the server should resolve the correct social account automatically.
+            If both are omitted, the server may use defaults.
           schema:
             type: string
             example: "17841476107371059"
