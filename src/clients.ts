@@ -25,6 +25,11 @@ const clients: Record<string, ClientConfig> = {
     domain: 'vipeds.org',
     ga4_property_id: '529057672',
   },
+  drhector: {
+    name: 'Dr Hector Rodriguez',
+    domain: 'hrodriguezmd.com',
+    ga4_property_id: '531375265',
+  },
 };
 
 export default clients;
