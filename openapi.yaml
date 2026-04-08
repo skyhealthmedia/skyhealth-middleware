@@ -184,6 +184,11 @@ components:
     Ga4KpiResponse:
       type: object
       properties:
+        client:
+          type: string
+          nullable: true
+        property_id:
+          type: string
         sessions:
           type: object
           properties:
@@ -209,14 +214,50 @@ components:
                 type: integer
               sessions:
                 type: integer
+        traffic_sources:
+          type: object
+          description: Sessions and users broken down by channel (Organic Search, Paid Search, Social, Direct, Referral, etc.)
+          properties:
+            7d:
+              type: array
+              items:
+                $ref: '#/components/schemas/TrafficSource'
+            28d:
+              type: array
+              items:
+                $ref: '#/components/schemas/TrafficSource'
         events:
-          type: array
-          items:
-            type: object
-        conversions:
-          type: array
-          items:
-            type: object
+          type: object
+          description: Event counts broken down by event name (form_submit, click, phone_call, page_view, etc.)
+          properties:
+            7d:
+              type: array
+              items:
+                $ref: '#/components/schemas/EventCount'
+            28d:
+              type: array
+              items:
+                $ref: '#/components/schemas/EventCount'
+
+    TrafficSource:
+      type: object
+      properties:
+        channel:
+          type: string
+          description: Channel group name (e.g. Organic Search, Direct, Social, Paid Search, Referral)
+        sessions:
+          type: integer
+        users:
+          type: integer
+
+    EventCount:
+      type: object
+      properties:
+        event_name:
+          type: string
+          description: GA4 event name (e.g. form_submit, click, page_view, scroll, first_visit)
+        count:
+          type: integer
 
     SocialKpiResponse:
       type: object

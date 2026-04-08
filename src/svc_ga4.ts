@@ -52,6 +52,42 @@ export async function ga4Handler(req: FastifyRequest, reply: FastifyReply) {
       limit: topLimit,
     });
 
+    // Traffic source breakdown (7d and 28d)
+    const [src7] = await gaClient.runReport({
+      property,
+      dateRanges: [{ startDate: '7daysAgo', endDate: 'today' }],
+      metrics: [{ name: 'sessions' }, { name: 'totalUsers' }],
+      dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+      orderBys: [{ desc: true, metric: { metricName: 'sessions' } }],
+    });
+
+    const [src28] = await gaClient.runReport({
+      property,
+      dateRanges: [{ startDate: '28daysAgo', endDate: 'today' }],
+      metrics: [{ name: 'sessions' }, { name: 'totalUsers' }],
+      dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+      orderBys: [{ desc: true, metric: { metricName: 'sessions' } }],
+    });
+
+    // Key events / conversions (7d) — tracks form submissions, clicks, calls, etc.
+    const [events7] = await gaClient.runReport({
+      property,
+      dateRanges: [{ startDate: '7daysAgo', endDate: 'today' }],
+      metrics: [{ name: 'eventCount' }],
+      dimensions: [{ name: 'eventName' }],
+      orderBys: [{ desc: true, metric: { metricName: 'eventCount' } }],
+      limit: 20,
+    });
+
+    const [events28] = await gaClient.runReport({
+      property,
+      dateRanges: [{ startDate: '28daysAgo', endDate: 'today' }],
+      metrics: [{ name: 'eventCount' }],
+      dimensions: [{ name: 'eventName' }],
+      orderBys: [{ desc: true, metric: { metricName: 'eventCount' } }],
+      limit: 20,
+    });
+
     const getTotals = (r: any) => {
       const row = r.rows?.[0];
       return {
@@ -69,14 +105,33 @@ export async function ga4Handler(req: FastifyRequest, reply: FastifyReply) {
       sessions: int(row.metricValues?.[1]?.value),
     }));
 
+    const mapSources = (r: any) =>
+      (r.rows || []).map((row: any) => ({
+        channel: row.dimensionValues?.[0]?.value || 'Unknown',
+        sessions: int(row.metricValues?.[0]?.value),
+        users: int(row.metricValues?.[1]?.value),
+      }));
+
+    const mapEvents = (r: any) =>
+      (r.rows || []).map((row: any) => ({
+        event_name: row.dimensionValues?.[0]?.value || '',
+        count: int(row.metricValues?.[0]?.value),
+      }));
+
     return reply.send({
       client: rawClientKey || null,
       property_id: propertyId,
       sessions: { '7d': t7.sessions, '28d': t28.sessions },
       users: { '7d': t7.users, '28d': t28.users },
       top_pages,
-      events: [],
-      conversions: [],
+      traffic_sources: {
+        '7d': mapSources(src7),
+        '28d': mapSources(src28),
+      },
+      events: {
+        '7d': mapEvents(events7),
+        '28d': mapEvents(events28),
+      },
     });
   } catch (err: any) {
     req.log.error(err);
