@@ -55,6 +55,8 @@ async function buildApp() {
       name: client.name,
       domain: client.domain,
       ga4_property_id: client.ga4_property_id,
+      ig_account_id: client.ig_account_id || null,
+      fb_page_id: client.fb_page_id || null,
     }));
 
     return reply.send(list);
@@ -83,14 +85,38 @@ async function buildApp() {
           .send({ error: 'invalid_platform', detail: "Use 'instagram' or 'facebook'." });
       }
 
-      // Use defaults if not provided
+      // Resolve account ID: ?client= → client config → ?accountId= → env defaults
+      const clientKey = String(q.client || '').toLowerCase();
+      const clientConfig = clientKey ? clients[clientKey] : undefined;
+
       let accountId = String(q.accountId || '');
+      if (!accountId && clientConfig) {
+        if (platformRaw === 'instagram') {
+          accountId = clientConfig.ig_account_id || '';
+        } else {
+          accountId = clientConfig.fb_page_id || '';
+        }
+      }
       if (!accountId) {
         if (platformRaw === 'instagram') {
           accountId = ENV.DEFAULT_IG_ID || '17841476107371059';
         } else {
           accountId = ENV.DEFAULT_FB_ID || '758804137314076';
         }
+      }
+
+      if (clientKey && !clientConfig) {
+        return reply.code(404).send({
+          error: 'client_not_found',
+          detail: `No client registered with key '${clientKey}'. Use /clients to list available clients.`,
+        });
+      }
+
+      if (clientConfig && !accountId) {
+        return reply.code(400).send({
+          error: 'no_social_config',
+          detail: `Client '${clientKey}' does not have a ${platformRaw} account configured.`,
+        });
       }
 
       if (!accessToken) {
@@ -109,7 +135,11 @@ async function buildApp() {
         { postLimit }
       );
 
-      return reply.send(data);
+      return reply.send({
+        client: clientConfig ? clientKey : undefined,
+        account_id: accountId,
+        ...data,
+      });
     } catch (err: any) {
       req.log.error(err);
       return reply
