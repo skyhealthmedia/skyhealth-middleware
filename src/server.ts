@@ -70,8 +70,17 @@ async function buildApp() {
     try {
       const q = req.query as Record<string, unknown>;
       const platformRaw = String(q.platform || '');
+
+      // Resolve client first so we can check for a per-client token
+      const clientKey = String(q.client || '').toLowerCase();
+      const clientConfig = clientKey ? clients[clientKey] : undefined;
+
+      // Token priority: ?accessToken → client-specific env var → shared META_ACCESS_TOKEN → FB_GRAPH_TOKEN
+      const clientTokenEnv = clientConfig?.meta_access_token_env;
+      const clientToken = clientTokenEnv ? (process.env[clientTokenEnv] || '') : '';
       const accessToken =
         String(q.accessToken || '') ||
+        clientToken ||
         String(ENV.META_ACCESS_TOKEN || ENV.FB_GRAPH_TOKEN || '');
 
       const postLimit = q.postLimit ? Number(q.postLimit) : 50;
@@ -85,10 +94,7 @@ async function buildApp() {
           .send({ error: 'invalid_platform', detail: "Use 'instagram' or 'facebook'." });
       }
 
-      // Resolve account ID: ?client= → client config → ?accountId= → env defaults
-      const clientKey = String(q.client || '').toLowerCase();
-      const clientConfig = clientKey ? clients[clientKey] : undefined;
-
+      // Resolve account ID: client config → ?accountId= → env defaults
       let accountId = String(q.accountId || '');
       if (!accountId && clientConfig) {
         if (platformRaw === 'instagram') {
