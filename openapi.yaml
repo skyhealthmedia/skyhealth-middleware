@@ -334,6 +334,14 @@ components:
                   permalink_url:
                     type: string
                     nullable: true
+                  impressions:
+                    type: integer
+                    nullable: true
+                    description: Total number of times the post was viewed
+                  reach:
+                    type: integer
+                    nullable: true
+                    description: Number of unique accounts that saw the post
                   created_time:
                     type: string
                     nullable: true
