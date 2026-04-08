@@ -4,6 +4,7 @@ type ClientConfig = {
   ga4_property_id: string;
   ig_account_id?: string;
   fb_page_id?: string;
+  meta_access_token_env?: string; // env var name holding this client's Meta token (falls back to shared META_ACCESS_TOKEN)
 };
 
 const clients: Record<string, ClientConfig> = {
@@ -25,6 +26,7 @@ const clients: Record<string, ClientConfig> = {
     ga4_property_id: '528517254',
     ig_account_id: '17841447254780623',
     fb_page_id: '102465945290748',
+    meta_access_token_env: 'META_ACCESS_TOKEN_PEDSGI',
   },
   vipeds: {
     name: 'VIPeds Pediatric Hospital Medicine',
