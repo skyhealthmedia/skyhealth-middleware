@@ -300,6 +300,14 @@ components:
                     type: integer
                   comments_count:
                     type: integer
+                  impressions:
+                    type: integer
+                    nullable: true
+                    description: Total number of times the post was viewed
+                  reach:
+                    type: integer
+                    nullable: true
+                    description: Number of unique accounts that saw the post
                   timestamp:
                     type: string
                     nullable: true
