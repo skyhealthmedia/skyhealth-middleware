@@ -26,8 +26,10 @@ async function getIgPostInsights(
   const metrics = isReel ? 'plays,reach' : 'impressions,reach';
 
   try {
+    // Reels don't support period=lifetime; images/carousels/videos do
+    const periodParam = isReel ? '' : '&period=lifetime';
     const resp = await fetch(
-      `https://graph.facebook.com/v18.0/${mediaId}/insights?metric=${metrics}&access_token=${accessToken}`
+      `https://graph.facebook.com/v18.0/${mediaId}/insights?metric=${metrics}${periodParam}&access_token=${accessToken}`
     );
     const data: any = await resp.json();
 
@@ -40,9 +42,11 @@ async function getIgPostInsights(
           reach = metric.values?.[0]?.value ?? null;
         }
       }
+    } else if (data.error) {
+      console.warn(`IG insights error for media ${mediaId} (${mediaType}): ${data.error.message}`);
     }
-  } catch {
-    // Insights may not be available (e.g. story expired, permissions)
+  } catch (err) {
+    console.warn(`IG insights fetch failed for media ${mediaId}:`, err);
   }
 
   return { impressions, reach };
@@ -60,7 +64,7 @@ async function getFbPostInsights(
 
   try {
     const resp = await fetch(
-      `https://graph.facebook.com/v18.0/${postId}/insights?metric=post_impressions,post_impressions_unique&access_token=${pageAccessToken}`
+      `https://graph.facebook.com/v18.0/${postId}/insights?metric=post_impressions,post_impressions_unique&period=lifetime&access_token=${pageAccessToken}`
     );
     const data: any = await resp.json();
 
@@ -73,9 +77,11 @@ async function getFbPostInsights(
           reach = metric.values?.[0]?.value ?? null;
         }
       }
+    } else if (data.error) {
+      console.warn(`FB insights error for post ${postId}: ${data.error.message}`);
     }
-  } catch {
-    // Insights may not be available for all post types
+  } catch (err) {
+    console.warn(`FB insights fetch failed for post ${postId}:`, err);
   }
 
   return { impressions, reach };
@@ -188,8 +194,8 @@ export async function getSocialKPI(
     // Resolve page token with fallback strategies
     const pageAccessToken = await resolveFbPageToken(accountId, accessToken);
 
-    // Fetch Page data
-    const fbFields = `id,name,fan_count,posts.limit(${postLimit}){id,message,permalink_url,created_time}`;
+    // Fetch Page data — include likes/comments/shares on each post
+    const fbFields = `id,name,fan_count,posts.limit(${postLimit}){id,message,permalink_url,created_time,likes.summary(true),comments.summary(true),shares}`;
 
     const resp = await fetch(
       `https://graph.facebook.com/v18.0/${accountId}?fields=${encodeURIComponent(
@@ -217,6 +223,9 @@ export async function getSocialKPI(
           id: p.id,
           message: p.message ?? null,
           permalink_url: p.permalink_url ?? null,
+          like_count: p.likes?.summary?.total_count ?? 0,
+          comments_count: p.comments?.summary?.total_count ?? 0,
+          shares_count: p.shares?.count ?? 0,
           impressions,
           reach,
           created_time: p.created_time ?? null,
