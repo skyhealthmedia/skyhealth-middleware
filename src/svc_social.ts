@@ -75,12 +75,11 @@ async function getFbPostInsights(
   let reach: number | null = null;
 
   try {
-    const resp = await fetch(
-      `${GRAPH_API}/${postId}/insights?metric=post_impressions,post_impressions_unique&access_token=${pageAccessToken}`
-    );
+    const url = `${GRAPH_API}/${postId}/insights?metric=post_impressions,post_impressions_unique&access_token=${pageAccessToken}`;
+    const resp = await fetch(url);
     const data: any = await resp.json();
 
-    if (resp.ok && data.data) {
+    if (resp.ok && data.data && data.data.length > 0) {
       for (const metric of data.data) {
         if (metric.name === "post_impressions") {
           impressions = metric.values?.[0]?.value ?? null;
@@ -89,9 +88,16 @@ async function getFbPostInsights(
           reach = metric.values?.[0]?.value ?? null;
         }
       }
+    } else if (resp.ok && (!data.data || data.data.length === 0)) {
+      // API returned 200 but no insight data — likely a permissions issue
+      console.warn(
+        `FB insights EMPTY for post ${postId}: API returned OK but data array is empty. ` +
+        `This usually means the token is missing 'read_insights' permission. ` +
+        `Full response: ${JSON.stringify(data)}`
+      );
     } else if (data.error) {
       console.warn(
-        `FB insights error for post ${postId}: ${data.error.message} [code: ${data.error.code}]`
+        `FB insights error for post ${postId}: ${data.error.message} [code: ${data.error.code}, subcode: ${data.error.error_subcode}]`
       );
     }
   } catch (err) {
