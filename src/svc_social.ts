@@ -1,5 +1,8 @@
 import fetch from "node-fetch";
 
+// Use current Meta Graph API version (v18.0 is obsolete)
+const GRAPH_API = "https://graph.facebook.com/v25.0";
+
 export interface SocialKpiOptions {
   platform: "instagram" | "facebook";
   accountId: string;
@@ -7,53 +10,62 @@ export interface SocialKpiOptions {
 }
 
 /**
- * Fetch Instagram post insights. Metric names differ by media type:
- * - IMAGE / CAROUSEL_ALBUM: impressions, reach
- * - VIDEO: impressions, reach  (legacy video)
- * - REEL: plays, reach
- * - STORY: impressions, reach (but only available for 24h)
+ * Fetch Instagram media-level insights.
+ *
+ * As of April 2025, Meta deprecated `impressions` and `plays` on Instagram.
+ * The replacement is `views` — a unified metric across all media types.
+ * `reach` remains available.
+ *
+ * Valid for all media types (IMAGE, VIDEO, CAROUSEL_ALBUM, REEL):
+ *   - views: total times the media was displayed on screen (includes repeats)
+ *   - reach: unique accounts that saw the media
+ *
+ * No period parameter needed — media insights are always lifetime.
  */
 async function getIgPostInsights(
   mediaId: string,
   mediaType: string,
   accessToken: string
-): Promise<{ impressions: number | null; reach: number | null }> {
-  let impressions: number | null = null;
+): Promise<{ views: number | null; reach: number | null }> {
+  let views: number | null = null;
   let reach: number | null = null;
 
-  // Reels use "plays" instead of "impressions"
-  const isReel = (mediaType || '').toUpperCase() === 'REEL';
-  const metrics = isReel ? 'plays,reach' : 'impressions,reach';
-
   try {
-    // Reels don't support period=lifetime; images/carousels/videos do
-    const periodParam = isReel ? '' : '&period=lifetime';
     const resp = await fetch(
-      `https://graph.facebook.com/v18.0/${mediaId}/insights?metric=${metrics}${periodParam}&access_token=${accessToken}`
+      `${GRAPH_API}/${mediaId}/insights?metric=views,reach&access_token=${accessToken}`
     );
     const data: any = await resp.json();
 
     if (resp.ok && data.data) {
       for (const metric of data.data) {
-        if (metric.name === 'impressions' || metric.name === 'plays') {
-          impressions = metric.values?.[0]?.value ?? null;
+        if (metric.name === "views") {
+          views = metric.values?.[0]?.value ?? null;
         }
-        if (metric.name === 'reach') {
+        if (metric.name === "reach") {
           reach = metric.values?.[0]?.value ?? null;
         }
       }
     } else if (data.error) {
-      console.warn(`IG insights error for media ${mediaId} (${mediaType}): ${data.error.message}`);
+      console.warn(
+        `IG insights error for media ${mediaId} (${mediaType}): ${data.error.message} [code: ${data.error.code}]`
+      );
     }
   } catch (err) {
     console.warn(`IG insights fetch failed for media ${mediaId}:`, err);
   }
 
-  return { impressions, reach };
+  return { views, reach };
 }
 
 /**
- * Fetch Facebook post insights using the Page access token.
+ * Fetch Facebook post insights.
+ *
+ * Requires a Page access token with pages_read_engagement + read_insights.
+ * No period parameter needed — post insights default to lifetime.
+ *
+ * Metrics:
+ *   - post_impressions: total times post entered a screen
+ *   - post_impressions_unique: unique people who saw it (= reach)
  */
 async function getFbPostInsights(
   postId: string,
@@ -64,21 +76,23 @@ async function getFbPostInsights(
 
   try {
     const resp = await fetch(
-      `https://graph.facebook.com/v18.0/${postId}/insights?metric=post_impressions,post_impressions_unique&period=lifetime&access_token=${pageAccessToken}`
+      `${GRAPH_API}/${postId}/insights?metric=post_impressions,post_impressions_unique&access_token=${pageAccessToken}`
     );
     const data: any = await resp.json();
 
     if (resp.ok && data.data) {
       for (const metric of data.data) {
-        if (metric.name === 'post_impressions') {
+        if (metric.name === "post_impressions") {
           impressions = metric.values?.[0]?.value ?? null;
         }
-        if (metric.name === 'post_impressions_unique') {
+        if (metric.name === "post_impressions_unique") {
           reach = metric.values?.[0]?.value ?? null;
         }
       }
     } else if (data.error) {
-      console.warn(`FB insights error for post ${postId}: ${data.error.message}`);
+      console.warn(
+        `FB insights error for post ${postId}: ${data.error.message} [code: ${data.error.code}]`
+      );
     }
   } catch (err) {
     console.warn(`FB insights fetch failed for post ${postId}:`, err);
@@ -90,8 +104,8 @@ async function getFbPostInsights(
 /**
  * Try to resolve a Facebook Page access token.
  * Strategy:
- *   1. Call /me/accounts and find the page (works when user token manages the page)
- *   2. If that fails, try using the token directly as a Page token (works for Page-scoped tokens)
+ *   1. Call /me/accounts and find the page (user token manages the page)
+ *   2. Try using the token directly as a Page token (Page-scoped tokens)
  */
 async function resolveFbPageToken(
   accountId: string,
@@ -100,7 +114,7 @@ async function resolveFbPageToken(
   // Strategy 1: /me/accounts
   try {
     const resp = await fetch(
-      `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}`
+      `${GRAPH_API}/me/accounts?access_token=${accessToken}`
     );
     const data: any = await resp.json();
 
@@ -114,15 +128,15 @@ async function resolveFbPageToken(
     // Fall through to strategy 2
   }
 
-  // Strategy 2: Try the token directly — it may already be a Page-scoped token
+  // Strategy 2: Try the token directly
   try {
     const testResp = await fetch(
-      `https://graph.facebook.com/v18.0/${accountId}?fields=id,name&access_token=${accessToken}`
+      `${GRAPH_API}/${accountId}?fields=id,name&access_token=${accessToken}`
     );
     const testData: any = await testResp.json();
 
     if (testResp.ok && testData.id) {
-      return accessToken; // Token works directly for this page
+      return accessToken;
     }
   } catch {
     // Fall through to error
@@ -130,7 +144,7 @@ async function resolveFbPageToken(
 
   throw new Error(
     `Cannot access Facebook Page ${accountId}. The token does not manage this page and cannot access it directly. ` +
-    `Ensure the page is added to the Meta Business Manager or use a Page-scoped access token.`
+      `Ensure the page is added to the Meta Business Manager or use a Page-scoped access token.`
   );
 }
 
@@ -139,11 +153,10 @@ export async function getSocialKPI(
   { postLimit = 5 }: { postLimit?: number } = {}
 ) {
   if (platform === "instagram") {
-    // Request media_type so we can use the correct insight metrics per post
     const igFields = `username,followers_count,media_count,media.limit(${postLimit}){id,caption,media_url,media_type,permalink,like_count,comments_count,timestamp}`;
 
     const resp = await fetch(
-      `https://graph.facebook.com/v18.0/${accountId}?fields=${encodeURIComponent(
+      `${GRAPH_API}/${accountId}?fields=${encodeURIComponent(
         igFields
       )}&access_token=${accessToken}`
     );
@@ -156,13 +169,13 @@ export async function getSocialKPI(
       );
     }
 
-    // Fetch insights for each post (parallel)
+    // Fetch insights for each post in parallel
     const posts = data.media?.data || [];
     const postsWithViews = await Promise.all(
       posts.map(async (m: any) => {
-        const { impressions, reach } = await getIgPostInsights(
+        const { views, reach } = await getIgPostInsights(
           m.id,
-          m.media_type || '',
+          m.media_type || "",
           accessToken
         );
         return {
@@ -173,7 +186,7 @@ export async function getSocialKPI(
           permalink: m.permalink ?? null,
           like_count: m.like_count ?? 0,
           comments_count: m.comments_count ?? 0,
-          impressions,
+          views,
           reach,
           timestamp: m.timestamp ?? null,
         };
@@ -198,7 +211,7 @@ export async function getSocialKPI(
     const fbFields = `id,name,fan_count,posts.limit(${postLimit}){id,message,permalink_url,created_time,likes.summary(true),comments.summary(true),shares}`;
 
     const resp = await fetch(
-      `https://graph.facebook.com/v18.0/${accountId}?fields=${encodeURIComponent(
+      `${GRAPH_API}/${accountId}?fields=${encodeURIComponent(
         fbFields
       )}&access_token=${pageAccessToken}`
     );
@@ -211,7 +224,7 @@ export async function getSocialKPI(
       );
     }
 
-    // Fetch insights for each post (parallel)
+    // Fetch insights for each post in parallel
     const fbPosts = data.posts?.data || [];
     const fbPostsWithViews = await Promise.all(
       fbPosts.map(async (p: any) => {

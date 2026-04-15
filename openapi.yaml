@@ -290,6 +290,10 @@ components:
                   caption:
                     type: string
                     nullable: true
+                  media_type:
+                    type: string
+                    nullable: true
+                    description: Post type (IMAGE, VIDEO, CAROUSEL_ALBUM, REEL)
                   media_url:
                     type: string
                     nullable: true
@@ -300,10 +304,10 @@ components:
                     type: integer
                   comments_count:
                     type: integer
-                  impressions:
+                  views:
                     type: integer
                     nullable: true
-                    description: Total number of times the post was viewed
+                    description: Total times the post was displayed on screen (replaces deprecated impressions metric)
                   reach:
                     type: integer
                     nullable: true
@@ -334,10 +338,16 @@ components:
                   permalink_url:
                     type: string
                     nullable: true
+                  like_count:
+                    type: integer
+                  comments_count:
+                    type: integer
+                  shares_count:
+                    type: integer
                   impressions:
                     type: integer
                     nullable: true
-                    description: Total number of times the post was viewed
+                    description: Total times the post entered a screen
                   reach:
                     type: integer
                     nullable: true
