@@ -5,7 +5,7 @@ info:
   description: GA4 + Social KPI endpoints for SkyHealth Media agent.
 
 servers:
-  - url: https://skyhealth-media-ga4.onrender.com
+  - url: https://api.skyhealthmedia.com
 
 paths:
   /health:
