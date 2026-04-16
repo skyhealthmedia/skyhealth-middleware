@@ -325,6 +325,18 @@ components:
               type: integer
             likes:
               type: integer
+            page_views_28d:
+              type: integer
+              nullable: true
+              description: >
+                Total page media views over the last 28 days (page_media_view).
+                Meta's replacement for the deprecated page_impressions metric.
+            page_reach_28d:
+              type: integer
+              nullable: true
+              description: >
+                Unique accounts that viewed page content over the last 28 days
+                (page_media_viewers). Replaces page_impressions_unique.
             posts:
               type: array
               items:
@@ -347,11 +359,17 @@ components:
                   views:
                     type: integer
                     nullable: true
-                    description: Total media views (replaces deprecated post_impressions metric as of Nov 2025)
+                    description: >
+                      Post-level views. Currently returns null — Meta deprecated
+                      post_impressions in Nov 2025 and has not yet exposed the
+                      post-level replacement (post_media_view). Rollout expected
+                      by Jun 15, 2026. Use page_views_28d for reporting.
                   reach:
                     type: integer
                     nullable: true
-                    description: Number of unique accounts that saw the post
+                    description: >
+                      Post-level reach. Currently null — same rollout gap as
+                      views. Use page_reach_28d for reporting.
                   created_time:
                     type: string
                     nullable: true
