@@ -60,25 +60,23 @@ async function getIgPostInsights(
 /**
  * Fetch Facebook POST-level insights.
  *
- * Views / reach status (Apr 2026):
+ * As of April 2026 most post-level insight metrics are broken or deprecated:
  *   - `post_impressions` deprecated Nov 15, 2025.
- *   - `post_media_view` / `post_media_viewers` announced as replacements but
- *     return error #100 at the post level. Expected by Jun 15, 2026.
- *   - Use page-level `page_views_28d` for overall visibility metrics.
+ *   - `post_media_view` / `post_media_viewers` return error #100.
+ *   - `post_engaged_users`, `post_clicks` also return error #100 when
+ *     bundled together (and possibly individually).
  *
- * What DOES work at the post level:
- *   - `post_engaged_users` — unique users who engaged with the post
- *   - `post_clicks` — total clicks (link clicks, photo views, etc.)
- *   - `post_activity_by_action_type` — {like, comment, share} breakdown
+ * The ONE metric confirmed working at post level:
+ *   - `post_activity_by_action_type` → { like: N, comment: N, share: N }
  *
- * We request all of these in a single call. The views/reach attempt is
- * included so it "lights up" automatically once Meta enables it.
+ * We use this to derive `engaged_actions` (total engagement from insights)
+ * and expose the breakdown. We also still attempt `post_media_view` in a
+ * separate call so it auto-enables when Meta rolls it out.
  */
 interface FbPostInsightResult {
   views: number | null;
   reach: number | null;
-  engaged_users: number | null;
-  clicks: number | null;
+  engaged_actions: number | null;
 }
 
 async function getFbPostInsights(
@@ -88,43 +86,39 @@ async function getFbPostInsights(
   const result: FbPostInsightResult = {
     views: null,
     reach: null,
-    engaged_users: null,
-    clicks: null,
+    engaged_actions: null,
   };
 
-  // Helper: coerce scalar or object values to a single number
-  const toNumber = (val: unknown): number | null => {
-    if (typeof val === "number") return val;
-    if (val && typeof val === "object") {
-      const nums = Object.values(val as Record<string, unknown>).filter(
-        (v) => typeof v === "number"
-      ) as number[];
-      if (nums.length > 0) return nums.reduce((a, b) => a + b, 0);
-    }
-    return null;
-  };
-
-  // Batch 1: engagement metrics (known to work)
+  // Batch 1: post_activity_by_action_type — the ONE metric that works.
+  // Returns { like: N, comment: N, share: N } — we sum them for total engaged actions.
   try {
     const url =
       `${GRAPH_API}/${postId}/insights` +
-      `?metric=post_engaged_users,post_clicks,post_activity_by_action_type` +
+      `?metric=post_activity_by_action_type` +
       `&access_token=${pageAccessToken}`;
     const resp = await fetch(url);
     const data: any = await resp.json();
 
     if (resp.ok && Array.isArray(data.data)) {
       for (const m of data.data) {
-        const num = toNumber(m.values?.[0]?.value);
-        if (m.name === "post_engaged_users" && num !== null) result.engaged_users = num;
-        if (m.name === "post_clicks" && num !== null) result.clicks = num;
+        if (m.name === "post_activity_by_action_type") {
+          const val = m.values?.[0]?.value;
+          if (val && typeof val === "object") {
+            const nums = Object.values(val as Record<string, unknown>).filter(
+              (v) => typeof v === "number"
+            ) as number[];
+            if (nums.length > 0) {
+              result.engaged_actions = nums.reduce((a, b) => a + b, 0);
+            }
+          }
+        }
       }
     }
   } catch {
-    // non-fatal — engagement insights unavailable
+    // non-fatal
   }
 
-  // Batch 2: views/reach (currently broken, will auto-enable when Meta rolls out)
+  // Batch 2: views/reach (currently broken — will auto-enable when Meta rolls out)
   try {
     const url =
       `${GRAPH_API}/${postId}/insights` +
@@ -135,7 +129,8 @@ async function getFbPostInsights(
 
     if (resp.ok && Array.isArray(data.data)) {
       for (const m of data.data) {
-        const num = toNumber(m.values?.[0]?.value);
+        const val = m.values?.[0]?.value;
+        const num = typeof val === "number" ? val : null;
         if (m.name === "post_media_view" && num !== null) result.views = num;
         if (m.name === "post_media_viewers" && num !== null) result.reach = num;
       }
@@ -386,8 +381,7 @@ export async function getSocialKPI(
             like_count: p.likes?.summary?.total_count ?? 0,
             comments_count: p.comments?.summary?.total_count ?? 0,
             shares_count: p.shares?.count ?? 0,
-            engaged_users: insights.engaged_users,
-            clicks: insights.clicks,
+            engaged_actions: insights.engaged_actions,
             views: insights.views,
             reach: insights.reach,
             created_time: p.created_time ?? null,

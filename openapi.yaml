@@ -356,18 +356,15 @@ components:
                     type: integer
                   shares_count:
                     type: integer
-                  engaged_users:
+                  engaged_actions:
                     type: integer
                     nullable: true
                     description: >
-                      Unique users who engaged with the post (liked, commented,
-                      shared, or clicked). From post_engaged_users insight.
-                  clicks:
-                    type: integer
-                    nullable: true
-                    description: >
-                      Total clicks on the post (link clicks, photo views, etc.).
-                      From post_clicks insight.
+                      Total engagement actions from post_activity_by_action_type
+                      insight (sum of likes, comments, shares as counted by
+                      Meta's insights API — may differ slightly from the
+                      like_count/comments_count/shares_count fields which come
+                      from the post object directly).
                   views:
                     type: integer
                     nullable: true
