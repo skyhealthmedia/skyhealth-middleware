@@ -1,7 +1,7 @@
-openapi: 3.0.0
+openapi: 3.1.0
 info:
   title: SkyHealth Middleware API
-  version: "0.5.0"
+  version: "0.5.1"
   description: GA4 + Social KPI endpoints for SkyHealth Media agent.
 
 servers:
@@ -175,18 +175,21 @@ components:
         ga4_property_id:
           type: string
         ig_account_id:
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         fb_page_id:
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
 
     Ga4KpiResponse:
       type: object
       properties:
         client:
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         property_id:
           type: string
         sessions:
@@ -264,15 +267,17 @@ components:
       description: Social KPI results for Instagram or Facebook
       properties:
         client:
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
           description: Client key if resolved via ?client= parameter
         account_id:
           type: string
           description: The Instagram User ID or Facebook Page ID used
         instagram:
-          type: object
-          nullable: true
+          type:
+            - object
+            - "null"
           properties:
             username:
               type: string
@@ -288,36 +293,44 @@ components:
                   id:
                     type: string
                   caption:
-                    type: string
-                    nullable: true
+                    type:
+                      - string
+                      - "null"
                   media_type:
-                    type: string
-                    nullable: true
+                    type:
+                      - string
+                      - "null"
                     description: Post type (IMAGE, VIDEO, CAROUSEL_ALBUM, REEL)
                   media_url:
-                    type: string
-                    nullable: true
+                    type:
+                      - string
+                      - "null"
                   permalink:
-                    type: string
-                    nullable: true
+                    type:
+                      - string
+                      - "null"
                   like_count:
                     type: integer
                   comments_count:
                     type: integer
                   views:
-                    type: integer
-                    nullable: true
+                    type:
+                      - integer
+                      - "null"
                     description: Total times the post was displayed on screen (replaces deprecated impressions metric)
                   reach:
-                    type: integer
-                    nullable: true
+                    type:
+                      - integer
+                      - "null"
                     description: Number of unique accounts that saw the post
                   timestamp:
-                    type: string
-                    nullable: true
+                    type:
+                      - string
+                      - "null"
         facebook:
-          type: object
-          nullable: true
+          type:
+            - object
+            - "null"
           properties:
             page_name:
               type: string
@@ -326,17 +339,18 @@ components:
             likes:
               type: integer
             page_views_28d:
-              type: integer
-              nullable: true
+              type:
+                - integer
+                - "null"
               description: >
-                Total page media views over the last 28 days (page_media_view).
-                Meta's replacement for the deprecated page_impressions metric.
+                Total page views over the last 28 days.
+                Fallback from page_views_total when newer metrics are unavailable.
             page_reach_28d:
-              type: integer
-              nullable: true
+              type:
+                - integer
+                - "null"
               description: >
-                Unique accounts that viewed page content over the last 28 days
-                (page_media_viewers). Replaces page_impressions_unique.
+                Unique accounts that viewed page content over the last 28 days.
             posts:
               type: array
               items:
@@ -345,11 +359,13 @@ components:
                   id:
                     type: string
                   message:
-                    type: string
-                    nullable: true
+                    type:
+                      - string
+                      - "null"
                   permalink_url:
-                    type: string
-                    nullable: true
+                    type:
+                      - string
+                      - "null"
                   like_count:
                     type: integer
                   comments_count:
@@ -357,31 +373,32 @@ components:
                   shares_count:
                     type: integer
                   engaged_actions:
-                    type: integer
-                    nullable: true
+                    type:
+                      - integer
+                      - "null"
                     description: >
                       Total engagement actions from post_activity_by_action_type
                       insight (sum of likes, comments, shares as counted by
-                      Meta's insights API — may differ slightly from the
-                      like_count/comments_count/shares_count fields which come
-                      from the post object directly).
+                      Meta insights API).
                   views:
-                    type: integer
-                    nullable: true
+                    type:
+                      - integer
+                      - "null"
                     description: >
-                      Post-level views. Currently null — Meta deprecated
-                      post_impressions in Nov 2025 and has not yet exposed the
-                      post-level replacement (post_media_view). Rollout expected
-                      by Jun 15, 2026. Use page_views_28d for reporting.
+                      Post-level views. Currently null until Meta completes
+                      post_media_view rollout (expected by Jun 15, 2026).
+                      Use page_views_28d for reporting.
                   reach:
-                    type: integer
-                    nullable: true
+                    type:
+                      - integer
+                      - "null"
                     description: >
-                      Post-level reach. Currently null — same rollout gap as
-                      views. Use page_reach_28d for reporting.
+                      Post-level reach. Currently null, same rollout gap as views.
+                      Use page_reach_28d for reporting.
                   created_time:
-                    type: string
-                    nullable: true
+                    type:
+                      - string
+                      - "null"
 
     Prospect:
       type: object
@@ -389,13 +406,16 @@ components:
         name:
           type: string
         website:
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         instagram:
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         last_post_days:
-          type: integer
-          nullable: true
+          type:
+            - integer
+            - "null"
         notes:
           type: string
