@@ -93,6 +93,21 @@ async function getFbPostInsights(
     "post_activity_by_action_type",
   ];
 
+  // Coerce a metric value to a number. Meta returns values in three shapes:
+  //   - scalar: { value: 42 }
+  //   - object/breakdown: { value: { "comment": 3, "like": 12 } } → sum the numbers
+  //   - null / missing: { value: null } or no values array
+  const toNumber = (val: unknown): number | null => {
+    if (typeof val === "number") return val;
+    if (val && typeof val === "object") {
+      const nums = Object.values(val as Record<string, unknown>).filter(
+        (v) => typeof v === "number"
+      ) as number[];
+      if (nums.length > 0) return nums.reduce((a, b) => a + b, 0);
+    }
+    return null;
+  };
+
   for (const metrics of metricCandidates) {
     try {
       const url = `${GRAPH_API}/${postId}/insights?metric=${metrics}&access_token=${pageAccessToken}`;
@@ -101,8 +116,7 @@ async function getFbPostInsights(
 
       if (resp.ok && Array.isArray(data.data) && data.data.length > 0) {
         for (const metric of data.data) {
-          const val = metric.values?.[0]?.value;
-          const num = typeof val === "number" ? val : null;
+          const num = toNumber(metric.values?.[0]?.value);
 
           if (metric.name === "post_media_view" || metric.name === "post_impressions") {
             if (num !== null) views = num;
@@ -118,6 +132,12 @@ async function getFbPostInsights(
         if (views !== null || reach !== null) {
           return { views, reach };
         }
+
+        // Response was OK and had data entries, but no usable numbers. Record
+        // the raw shape so we can understand what Meta actually returned.
+        lastError = `no numeric value (metrics=${metrics}) raw=${JSON.stringify(
+          data.data
+        ).slice(0, 400)}`;
       } else if (data.error) {
         lastError = `${data.error.message} [code: ${data.error.code}${
           data.error.error_subcode ? `, subcode: ${data.error.error_subcode}` : ""
