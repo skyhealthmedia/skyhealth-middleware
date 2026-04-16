@@ -124,35 +124,78 @@ async function getFbPageInsights(
     return found ? total : null;
   };
 
-  try {
-    const url =
-      `${GRAPH_API}/${pageId}/insights` +
-      `?metric=page_media_view,page_media_viewers` +
-      `&period=day&date_preset=last_28d` +
-      `&access_token=${pageAccessToken}`;
-    const resp = await fetch(url);
-    const data: any = await resp.json();
+  // Try multiple metric groups in order — Meta's naming has been unstable:
+  //   1. page_media_view / page_media_viewers — stated Aug-2025 replacement
+  //   2. page_impressions / page_impressions_unique — legacy, deprecated Nov-2025
+  //      but may still work for some pages during transition.
+  //   3. page_views_total — old page-view counter, different semantic but
+  //      returns *something* so we can tell the token/permission work.
+  const metricCandidates = [
+    "page_media_view,page_media_viewers",
+    "page_impressions,page_impressions_unique",
+    "page_views_total",
+  ];
 
-    if (resp.ok && Array.isArray(data.data) && data.data.length > 0) {
-      let views: number | null = null;
-      let reach: number | null = null;
-      for (const m of data.data) {
-        if (m.name === "page_media_view") views = sumDailyValues(m);
-        if (m.name === "page_media_viewers") reach = sumDailyValues(m);
+  let views: number | null = null;
+  let reach: number | null = null;
+  const debug: string[] = [];
+
+  for (const metrics of metricCandidates) {
+    try {
+      const url =
+        `${GRAPH_API}/${pageId}/insights` +
+        `?metric=${metrics}` +
+        `&period=day&date_preset=last_28d` +
+        `&access_token=${pageAccessToken}`;
+      const resp = await fetch(url);
+      const data: any = await resp.json();
+
+      if (resp.ok && Array.isArray(data.data) && data.data.length > 0) {
+        for (const m of data.data) {
+          const summed = sumDailyValues(m);
+          if (
+            (m.name === "page_media_view" || m.name === "page_impressions") &&
+            summed !== null
+          ) {
+            views = summed;
+          }
+          if (
+            (m.name === "page_media_viewers" ||
+              m.name === "page_impressions_unique") &&
+            summed !== null
+          ) {
+            reach = summed;
+          }
+          if (m.name === "page_views_total" && summed !== null && views === null) {
+            views = summed; // best-effort proxy
+          }
+        }
+        debug.push(
+          `${metrics} → data.length=${data.data.length} rawSample=${JSON.stringify(
+            data.data
+          ).slice(0, 300)}`
+        );
+        if (views !== null || reach !== null) {
+          // Keep going only if we haven't yet captured anything useful.
+          break;
+        }
+      } else if (data.error) {
+        debug.push(
+          `${metrics} → error: ${data.error.message} [code: ${data.error.code}]`
+        );
+      } else if (resp.ok) {
+        debug.push(`${metrics} → empty data array (page likely too small or no traffic)`);
       }
-      return { views_28d: views, reach_28d: reach };
+    } catch (err) {
+      debug.push(`${metrics} → fetch threw: ${err}`);
     }
-
-    if (data.error) {
-      console.warn(
-        `FB page insights failed for ${pageId}: ${data.error.message} [code: ${data.error.code}]`
-      );
-    }
-  } catch (err) {
-    console.warn(`FB page insights fetch failed for ${pageId}:`, err);
   }
 
-  return { views_28d: null, reach_28d: null };
+  if (views === null && reach === null) {
+    console.warn(`FB page insights empty for ${pageId}. Trace: ${debug.join(" | ")}`);
+  }
+
+  return { views_28d: views, reach_28d: reach };
 }
 
 /**
