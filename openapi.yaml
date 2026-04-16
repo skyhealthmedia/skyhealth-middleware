@@ -356,11 +356,23 @@ components:
                     type: integer
                   shares_count:
                     type: integer
+                  engaged_users:
+                    type: integer
+                    nullable: true
+                    description: >
+                      Unique users who engaged with the post (liked, commented,
+                      shared, or clicked). From post_engaged_users insight.
+                  clicks:
+                    type: integer
+                    nullable: true
+                    description: >
+                      Total clicks on the post (link clicks, photo views, etc.).
+                      From post_clicks insight.
                   views:
                     type: integer
                     nullable: true
                     description: >
-                      Post-level views. Currently returns null — Meta deprecated
+                      Post-level views. Currently null — Meta deprecated
                       post_impressions in Nov 2025 and has not yet exposed the
                       post-level replacement (post_media_view). Rollout expected
                       by Jun 15, 2026. Use page_views_28d for reporting.

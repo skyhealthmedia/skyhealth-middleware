@@ -58,45 +58,93 @@ async function getIgPostInsights(
 }
 
 /**
- * Fetch Facebook POST-level insights (views / reach).
+ * Fetch Facebook POST-level insights.
  *
- * IMPORTANT — as of April 2026, this is essentially a no-op:
- *   - `post_impressions` / `post_impressions_unique` were deprecated Nov 15, 2025.
- *   - Meta announced `post_media_view` / `post_media_viewers` as replacements,
- *     but has NOT yet exposed them at the post object level. Full post-level
- *     rollout is expected by the Jun 15, 2026 deadline.
- *   - Only `page_media_view` / `page_media_viewers` (aggregate) work today.
+ * Views / reach status (Apr 2026):
+ *   - `post_impressions` deprecated Nov 15, 2025.
+ *   - `post_media_view` / `post_media_viewers` announced as replacements but
+ *     return error #100 at the post level. Expected by Jun 15, 2026.
+ *   - Use page-level `page_views_28d` for overall visibility metrics.
  *
- * We still attempt the post-level call so that when Meta enables it, this
- * starts returning data automatically without a code change. Until then it
- * silently returns `{ views: null, reach: null }` and the page-level total
- * (returned by getFbPageInsights below) is what clients should report on.
+ * What DOES work at the post level:
+ *   - `post_engaged_users` — unique users who engaged with the post
+ *   - `post_clicks` — total clicks (link clicks, photo views, etc.)
+ *   - `post_activity_by_action_type` — {like, comment, share} breakdown
+ *
+ * We request all of these in a single call. The views/reach attempt is
+ * included so it "lights up" automatically once Meta enables it.
  */
+interface FbPostInsightResult {
+  views: number | null;
+  reach: number | null;
+  engaged_users: number | null;
+  clicks: number | null;
+}
+
 async function getFbPostInsights(
   postId: string,
   pageAccessToken: string
-): Promise<{ views: number | null; reach: number | null }> {
+): Promise<FbPostInsightResult> {
+  const result: FbPostInsightResult = {
+    views: null,
+    reach: null,
+    engaged_users: null,
+    clicks: null,
+  };
+
+  // Helper: coerce scalar or object values to a single number
+  const toNumber = (val: unknown): number | null => {
+    if (typeof val === "number") return val;
+    if (val && typeof val === "object") {
+      const nums = Object.values(val as Record<string, unknown>).filter(
+        (v) => typeof v === "number"
+      ) as number[];
+      if (nums.length > 0) return nums.reduce((a, b) => a + b, 0);
+    }
+    return null;
+  };
+
+  // Batch 1: engagement metrics (known to work)
   try {
-    const url = `${GRAPH_API}/${postId}/insights?metric=post_media_view,post_media_viewers&access_token=${pageAccessToken}`;
+    const url =
+      `${GRAPH_API}/${postId}/insights` +
+      `?metric=post_engaged_users,post_clicks,post_activity_by_action_type` +
+      `&access_token=${pageAccessToken}`;
     const resp = await fetch(url);
     const data: any = await resp.json();
 
-    if (resp.ok && Array.isArray(data.data) && data.data.length > 0) {
-      let views: number | null = null;
-      let reach: number | null = null;
-      for (const metric of data.data) {
-        const val = metric.values?.[0]?.value;
-        const num = typeof val === "number" ? val : null;
-        if (metric.name === "post_media_view" && num !== null) views = num;
-        if (metric.name === "post_media_viewers" && num !== null) reach = num;
+    if (resp.ok && Array.isArray(data.data)) {
+      for (const m of data.data) {
+        const num = toNumber(m.values?.[0]?.value);
+        if (m.name === "post_engaged_users" && num !== null) result.engaged_users = num;
+        if (m.name === "post_clicks" && num !== null) result.clicks = num;
       }
-      return { views, reach };
     }
   } catch {
-    // swallow — post-level insights are not yet reliably available
+    // non-fatal — engagement insights unavailable
   }
 
-  return { views: null, reach: null };
+  // Batch 2: views/reach (currently broken, will auto-enable when Meta rolls out)
+  try {
+    const url =
+      `${GRAPH_API}/${postId}/insights` +
+      `?metric=post_media_view,post_media_viewers` +
+      `&access_token=${pageAccessToken}`;
+    const resp = await fetch(url);
+    const data: any = await resp.json();
+
+    if (resp.ok && Array.isArray(data.data)) {
+      for (const m of data.data) {
+        const num = toNumber(m.values?.[0]?.value);
+        if (m.name === "post_media_view" && num !== null) result.views = num;
+        if (m.name === "post_media_viewers" && num !== null) result.reach = num;
+      }
+    }
+  } catch {
+    // swallow — post-level views not yet available
+  }
+
+  return result;
 }
 
 /**
@@ -321,27 +369,32 @@ export async function getSocialKPI(
       );
     }
 
-    // Page-level insights (views/reach aggregated over 28 days) — reliable.
-    // Per-post views/reach: Meta hasn't exposed post_media_view yet (Apr 2026).
-    // We skip the per-post insight calls entirely to avoid 50+ wasted API
-    // round-trips that all return null. The fields are still in the response
-    // (as null) for forward compatibility — when Meta enables post-level
-    // metrics we just need to uncomment the getFbPostInsights call below.
+    // Kick off page-level insights + per-post insights in parallel.
+    // Page-level: reliable views/reach totals for the last 28 days.
+    // Per-post: engaged_users + clicks (working), views/reach (null until Jun 2026).
     const fbPosts = data.posts?.data || [];
 
-    const pageInsights = await getFbPageInsights(accountId, pageAccessToken);
-
-    const fbPostsWithViews = fbPosts.map((p: any) => ({
-      id: p.id,
-      message: p.message ?? null,
-      permalink_url: p.permalink_url ?? null,
-      like_count: p.likes?.summary?.total_count ?? 0,
-      comments_count: p.comments?.summary?.total_count ?? 0,
-      shares_count: p.shares?.count ?? 0,
-      views: null as number | null,   // TODO: re-enable getFbPostInsights after Jun 2026
-      reach: null as number | null,
-      created_time: p.created_time ?? null,
-    }));
+    const [pageInsights, fbPostsWithInsights] = await Promise.all([
+      getFbPageInsights(accountId, pageAccessToken),
+      Promise.all(
+        fbPosts.map(async (p: any) => {
+          const insights = await getFbPostInsights(p.id, pageAccessToken);
+          return {
+            id: p.id,
+            message: p.message ?? null,
+            permalink_url: p.permalink_url ?? null,
+            like_count: p.likes?.summary?.total_count ?? 0,
+            comments_count: p.comments?.summary?.total_count ?? 0,
+            shares_count: p.shares?.count ?? 0,
+            engaged_users: insights.engaged_users,
+            clicks: insights.clicks,
+            views: insights.views,
+            reach: insights.reach,
+            created_time: p.created_time ?? null,
+          };
+        })
+      ),
+    ]);
 
     return {
       facebook: {
@@ -350,7 +403,7 @@ export async function getSocialKPI(
         likes: data.fan_count ?? 0,
         page_views_28d: pageInsights.views_28d,
         page_reach_28d: pageInsights.reach_28d,
-        posts: fbPostsWithViews,
+        posts: fbPostsWithInsights,
       },
     };
   }
