@@ -344,10 +344,10 @@ components:
                     type: integer
                   shares_count:
                     type: integer
-                  impressions:
+                  views:
                     type: integer
                     nullable: true
-                    description: Total times the post entered a screen
+                    description: Total media views (replaces deprecated post_impressions metric as of Nov 2025)
                   reach:
                     type: integer
                     nullable: true

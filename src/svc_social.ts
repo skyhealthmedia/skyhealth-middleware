@@ -63,48 +63,78 @@ async function getIgPostInsights(
  * Requires a Page access token with pages_read_engagement + read_insights.
  * No period parameter needed — post insights default to lifetime.
  *
- * Metrics:
- *   - post_impressions: total times post entered a screen
- *   - post_impressions_unique: unique people who saw it (= reach)
+ * Meta's post-level "impressions → views" migration has been rocky:
+ *   - `post_impressions` / `post_impressions_unique` were deprecated Nov 15, 2025.
+ *   - Meta announced `post_media_view` / `post_media_viewers` as replacements,
+ *     but the post-level variants are returning error #100 in many accounts
+ *     as of Apr 2026 (only the page-level `page_media_view` / `page_media_viewers`
+ *     appear to be universally available). Full post-level parity is expected
+ *     by the Jun 15, 2026 deadline.
+ *
+ * Strategy: try each candidate metric group in order. If none succeed we return
+ * nulls and log the final error — the rest of the response (likes/comments/
+ * shares/permalink) is not blocked by missing views/reach.
  */
 async function getFbPostInsights(
   postId: string,
   pageAccessToken: string
-): Promise<{ impressions: number | null; reach: number | null }> {
-  let impressions: number | null = null;
+): Promise<{ views: number | null; reach: number | null }> {
+  let views: number | null = null;
   let reach: number | null = null;
+  let lastError: string | null = null;
 
-  try {
-    const url = `${GRAPH_API}/${postId}/insights?metric=post_impressions,post_impressions_unique&access_token=${pageAccessToken}`;
-    const resp = await fetch(url);
-    const data: any = await resp.json();
+  // Ordered list of metric groups to try. First one that returns data wins.
+  //   1. New unified metric set (post-Nov 2025, not yet universally available)
+  //   2. Legacy impressions/unique (works on some older/grandfathered tokens)
+  //   3. Engagement-only fallback (always-available Page Insights metric)
+  const metricCandidates = [
+    "post_media_view,post_media_viewers",
+    "post_impressions,post_impressions_unique",
+    "post_activity_by_action_type",
+  ];
 
-    if (resp.ok && data.data && data.data.length > 0) {
-      for (const metric of data.data) {
-        if (metric.name === "post_impressions") {
-          impressions = metric.values?.[0]?.value ?? null;
+  for (const metrics of metricCandidates) {
+    try {
+      const url = `${GRAPH_API}/${postId}/insights?metric=${metrics}&access_token=${pageAccessToken}`;
+      const resp = await fetch(url);
+      const data: any = await resp.json();
+
+      if (resp.ok && Array.isArray(data.data) && data.data.length > 0) {
+        for (const metric of data.data) {
+          const val = metric.values?.[0]?.value;
+          const num = typeof val === "number" ? val : null;
+
+          if (metric.name === "post_media_view" || metric.name === "post_impressions") {
+            if (num !== null) views = num;
+          } else if (
+            metric.name === "post_media_viewers" ||
+            metric.name === "post_impressions_unique"
+          ) {
+            if (num !== null) reach = num;
+          }
         }
-        if (metric.name === "post_impressions_unique") {
-          reach = metric.values?.[0]?.value ?? null;
+
+        // If we got any numeric data, we're done — no need to try other groups.
+        if (views !== null || reach !== null) {
+          return { views, reach };
         }
+      } else if (data.error) {
+        lastError = `${data.error.message} [code: ${data.error.code}${
+          data.error.error_subcode ? `, subcode: ${data.error.error_subcode}` : ""
+        }] (metrics=${metrics})`;
+      } else if (resp.ok) {
+        lastError = `empty response (metrics=${metrics}) — token likely missing read_insights`;
       }
-    } else if (resp.ok && (!data.data || data.data.length === 0)) {
-      // API returned 200 but no insight data — likely a permissions issue
-      console.warn(
-        `FB insights EMPTY for post ${postId}: API returned OK but data array is empty. ` +
-        `This usually means the token is missing 'read_insights' permission. ` +
-        `Full response: ${JSON.stringify(data)}`
-      );
-    } else if (data.error) {
-      console.warn(
-        `FB insights error for post ${postId}: ${data.error.message} [code: ${data.error.code}, subcode: ${data.error.error_subcode}]`
-      );
+    } catch (err) {
+      lastError = `${err} (metrics=${metrics})`;
     }
-  } catch (err) {
-    console.warn(`FB insights fetch failed for post ${postId}:`, err);
   }
 
-  return { impressions, reach };
+  if (lastError) {
+    console.warn(`FB insights unavailable for post ${postId}: ${lastError}`);
+  }
+
+  return { views, reach };
 }
 
 /**
@@ -234,7 +264,7 @@ export async function getSocialKPI(
     const fbPosts = data.posts?.data || [];
     const fbPostsWithViews = await Promise.all(
       fbPosts.map(async (p: any) => {
-        const { impressions, reach } = await getFbPostInsights(
+        const { views, reach } = await getFbPostInsights(
           p.id,
           pageAccessToken
         );
@@ -245,7 +275,7 @@ export async function getSocialKPI(
           like_count: p.likes?.summary?.total_count ?? 0,
           comments_count: p.comments?.summary?.total_count ?? 0,
           shares_count: p.shares?.count ?? 0,
-          impressions,
+          views,
           reach,
           created_time: p.created_time ?? null,
         };
