@@ -321,34 +321,27 @@ export async function getSocialKPI(
       );
     }
 
-    // Kick off page-level insights + per-post insights in parallel. Page-level
-    // views/reach are the reliable "how many people saw our content" signal;
-    // per-post views/reach are currently null until Meta completes its
-    // post-level media_view rollout (expected Jun 2026).
+    // Page-level insights (views/reach aggregated over 28 days) — reliable.
+    // Per-post views/reach: Meta hasn't exposed post_media_view yet (Apr 2026).
+    // We skip the per-post insight calls entirely to avoid 50+ wasted API
+    // round-trips that all return null. The fields are still in the response
+    // (as null) for forward compatibility — when Meta enables post-level
+    // metrics we just need to uncomment the getFbPostInsights call below.
     const fbPosts = data.posts?.data || [];
 
-    const [pageInsights, fbPostsWithViews] = await Promise.all([
-      getFbPageInsights(accountId, pageAccessToken),
-      Promise.all(
-        fbPosts.map(async (p: any) => {
-          const { views, reach } = await getFbPostInsights(
-            p.id,
-            pageAccessToken
-          );
-          return {
-            id: p.id,
-            message: p.message ?? null,
-            permalink_url: p.permalink_url ?? null,
-            like_count: p.likes?.summary?.total_count ?? 0,
-            comments_count: p.comments?.summary?.total_count ?? 0,
-            shares_count: p.shares?.count ?? 0,
-            views,
-            reach,
-            created_time: p.created_time ?? null,
-          };
-        })
-      ),
-    ]);
+    const pageInsights = await getFbPageInsights(accountId, pageAccessToken);
+
+    const fbPostsWithViews = fbPosts.map((p: any) => ({
+      id: p.id,
+      message: p.message ?? null,
+      permalink_url: p.permalink_url ?? null,
+      like_count: p.likes?.summary?.total_count ?? 0,
+      comments_count: p.comments?.summary?.total_count ?? 0,
+      shares_count: p.shares?.count ?? 0,
+      views: null as number | null,   // TODO: re-enable getFbPostInsights after Jun 2026
+      reach: null as number | null,
+      created_time: p.created_time ?? null,
+    }));
 
     return {
       facebook: {

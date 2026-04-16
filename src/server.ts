@@ -83,7 +83,7 @@ async function buildApp() {
         clientToken ||
         String(ENV.META_ACCESS_TOKEN || ENV.FB_GRAPH_TOKEN || '');
 
-      const postLimit = q.postLimit ? Number(q.postLimit) : 50;
+      const postLimit = q.postLimit ? Number(q.postLimit) : 25;
 
       if (
         !platformRaw ||
