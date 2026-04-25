@@ -1,6 +1,12 @@
 import fetch from 'node-fetch';
+import { ENV } from './env';
 
 const TIKTOK_API = 'https://open.tiktokapis.com/v2';
+
+// --- In-memory token cache (survives across requests, resets on redeploy) ---
+let cachedAccessToken: string | null = null;
+let cachedRefreshToken: string | null = null;
+let tokenExpiresAt: number = 0; // unix ms
 
 export interface TikTokUserInfo {
   open_id: string;
@@ -209,27 +215,122 @@ export async function refreshTikTokToken(
 }
 
 /**
+ * Resolve a valid TikTok access token.
+ *
+ * Priority:
+ *   1. Cached in-memory token (if not expired)
+ *   2. TIKTOK_ACCESS_TOKEN env var (initial seed from OAuth)
+ *   3. Auto-refresh using TIKTOK_REFRESH_TOKEN
+ *
+ * On successful refresh the new tokens are cached in memory so subsequent
+ * requests don't need to refresh again. The cache survives for the lifetime
+ * of the server process (~24h on Render free tier before spin-down, longer on paid).
+ */
+async function resolveAccessToken(providedToken?: string): Promise<string> {
+  // If caller provided an explicit token, use it directly
+  if (providedToken) return providedToken;
+
+  // Check in-memory cache first
+  if (cachedAccessToken && Date.now() < tokenExpiresAt) {
+    return cachedAccessToken;
+  }
+
+  // Try the env var (initial seed)
+  const envToken = ENV.TIKTOK_ACCESS_TOKEN;
+  if (envToken && !cachedAccessToken) {
+    // First time — use env token but we don't know when it expires,
+    // so we'll let it fail and then refresh.
+    cachedAccessToken = envToken;
+    cachedRefreshToken = ENV.TIKTOK_REFRESH_TOKEN || null;
+    tokenExpiresAt = 0; // unknown, will try and refresh on failure
+    return envToken;
+  }
+
+  // Try refreshing
+  const refreshToken = cachedRefreshToken || ENV.TIKTOK_REFRESH_TOKEN;
+  const clientKey = ENV.TIKTOK_CLIENT_KEY;
+  const clientSecret = ENV.TIKTOK_CLIENT_SECRET;
+
+  if (refreshToken && clientKey && clientSecret) {
+    console.log('[TikTok] Access token expired, refreshing...');
+    const refreshed = await refreshTikTokToken(refreshToken, clientKey, clientSecret);
+    cachedAccessToken = refreshed.access_token;
+    cachedRefreshToken = refreshed.refresh_token;
+    tokenExpiresAt = Date.now() + (refreshed.expires_in - 300) * 1000; // 5 min buffer
+    console.log('[TikTok] Token refreshed successfully, expires in', refreshed.expires_in, 'seconds');
+    return cachedAccessToken;
+  }
+
+  throw new Error(
+    'No valid TikTok access token available. Visit /auth/tiktok to authorize, ' +
+    'then set TIKTOK_ACCESS_TOKEN and TIKTOK_REFRESH_TOKEN in Render.'
+  );
+}
+
+/**
  * Main entry: fetch TikTok KPIs (profile + videos).
+ * Automatically refreshes expired tokens.
  */
 export async function getTikTokKPI(
-  accessToken: string,
+  providedToken: string,
   { postLimit = 10 }: { postLimit?: number } = {}
 ): Promise<TikTokKpiResult> {
-  const [userInfo, videos] = await Promise.all([
-    getUserInfo(accessToken),
-    getVideos(accessToken, postLimit),
-  ]);
+  let token = await resolveAccessToken(providedToken || undefined);
 
-  return {
-    tiktok: {
-      username: null, // TikTok API doesn't expose @handle via Display API; display_name only
-      display_name: userInfo.display_name || null,
-      avatar_url: userInfo.avatar_url,
-      followers: userInfo.follower_count,
-      following: userInfo.following_count,
-      likes: userInfo.likes_count,
-      video_count: userInfo.video_count,
-      videos,
-    },
-  };
+  try {
+    const [userInfo, videos] = await Promise.all([
+      getUserInfo(token),
+      getVideos(token, postLimit),
+    ]);
+
+    return {
+      tiktok: {
+        username: null,
+        display_name: userInfo.display_name || null,
+        avatar_url: userInfo.avatar_url,
+        followers: userInfo.follower_count,
+        following: userInfo.following_count,
+        likes: userInfo.likes_count,
+        video_count: userInfo.video_count,
+        videos,
+      },
+    };
+  } catch (err: any) {
+    // If token was invalid, try refreshing once and retry
+    if (err?.message?.includes('access_token_invalid') || err?.message?.includes('token')) {
+      const refreshToken = cachedRefreshToken || ENV.TIKTOK_REFRESH_TOKEN;
+      const clientKey = ENV.TIKTOK_CLIENT_KEY;
+      const clientSecret = ENV.TIKTOK_CLIENT_SECRET;
+
+      if (refreshToken && clientKey && clientSecret) {
+        console.log('[TikTok] Token invalid, attempting refresh...');
+        const refreshed = await refreshTikTokToken(refreshToken, clientKey, clientSecret);
+        cachedAccessToken = refreshed.access_token;
+        cachedRefreshToken = refreshed.refresh_token;
+        tokenExpiresAt = Date.now() + (refreshed.expires_in - 300) * 1000;
+        token = cachedAccessToken;
+        console.log('[TikTok] Token refreshed after failure, retrying...');
+
+        const [userInfo, videos] = await Promise.all([
+          getUserInfo(token),
+          getVideos(token, postLimit),
+        ]);
+
+        return {
+          tiktok: {
+            username: null,
+            display_name: userInfo.display_name || null,
+            avatar_url: userInfo.avatar_url,
+            followers: userInfo.follower_count,
+            following: userInfo.following_count,
+            likes: userInfo.likes_count,
+            video_count: userInfo.video_count,
+            videos,
+          },
+        };
+      }
+    }
+
+    throw err;
+  }
 }

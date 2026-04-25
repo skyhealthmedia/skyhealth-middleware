@@ -23,6 +23,7 @@ export interface Env {
   TIKTOK_CLIENT_KEY?: string;
   TIKTOK_CLIENT_SECRET?: string;
   TIKTOK_ACCESS_TOKEN?: string;
+  TIKTOK_REFRESH_TOKEN?: string;
 }
 
 export const ENV: Env = {
@@ -43,4 +44,5 @@ export const ENV: Env = {
   TIKTOK_CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY,
   TIKTOK_CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET,
   TIKTOK_ACCESS_TOKEN: process.env.TIKTOK_ACCESS_TOKEN,
+  TIKTOK_REFRESH_TOKEN: process.env.TIKTOK_REFRESH_TOKEN,
 };
