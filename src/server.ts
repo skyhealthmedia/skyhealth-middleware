@@ -38,12 +38,14 @@ async function buildApp() {
   // --- Routes ---
   app.get('/health', async () => ({ ok: true }));
 
-  // TikTok domain verification
-  app.get('/tiktok-developers-site-verification', async (req, reply) => {
+  // TikTok domain verification (with and without .txt)
+  const tiktokVerification = async (_req: FastifyRequest, reply: FastifyReply) => {
     reply
       .type('text/plain')
       .send('tiktok-developers-site-verification=EmEtMnK6kSmCcLrWqhSy9LRAs17x2Dc0');
-  });
+  };
+  app.get('/tiktok-developers-site-verification', tiktokVerification);
+  app.get('/tiktok-developers-site-verification.txt', tiktokVerification);
 
   app.get('/openapi.yaml', async (req, reply) => {
     try {
