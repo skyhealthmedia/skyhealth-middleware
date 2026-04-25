@@ -21,7 +21,8 @@ async function buildApp() {
   app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
     if (
       req.url.startsWith('/health') ||
-      req.url.startsWith('/openapi.yaml')
+      req.url.startsWith('/openapi.yaml') ||
+      req.url.startsWith('/tiktok-developers-site-verification')
     ) {
       return;
     }
@@ -36,6 +37,13 @@ async function buildApp() {
 
   // --- Routes ---
   app.get('/health', async () => ({ ok: true }));
+
+  // TikTok domain verification
+  app.get('/tiktok-developers-site-verification', async (req, reply) => {
+    reply
+      .type('text/plain')
+      .send('tiktok-developers-site-verification=EmEtMnK6kSmCcLrWqhSy9LRAs17x2Dc0');
+  });
 
   app.get('/openapi.yaml', async (req, reply) => {
     try {
