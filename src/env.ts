@@ -20,6 +20,8 @@ export interface Env {
   YT_CLIENT_ID?: string;
   YT_CLIENT_SECRET?: string;
   YT_REFRESH_TOKEN?: string;
+  TIKTOK_CLIENT_KEY?: string;
+  TIKTOK_CLIENT_SECRET?: string;
   TIKTOK_ACCESS_TOKEN?: string;
 }
 
@@ -38,5 +40,7 @@ export const ENV: Env = {
   YT_CLIENT_ID: process.env.YT_CLIENT_ID,
   YT_CLIENT_SECRET: process.env.YT_CLIENT_SECRET,
   YT_REFRESH_TOKEN: process.env.YT_REFRESH_TOKEN,
+  TIKTOK_CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY,
+  TIKTOK_CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET,
   TIKTOK_ACCESS_TOKEN: process.env.TIKTOK_ACCESS_TOKEN,
 };

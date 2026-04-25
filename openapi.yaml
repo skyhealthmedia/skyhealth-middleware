@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SkyHealth Middleware API
-  version: "0.5.0"
-  description: GA4 + Social KPI endpoints for SkyHealth Media agent.
+  version: "0.6.0"
+  description: GA4 + Social (Instagram/Facebook/TikTok) KPI endpoints for SkyHealth Media agent.
 
 servers:
   - url: https://api.skyhealthmedia.com
@@ -76,7 +76,7 @@ paths:
   /kpi/social:
     get:
       operationId: getSocialKpis
-      summary: Get social KPIs (Instagram/Facebook)
+      summary: Get social KPIs (Instagram/Facebook/TikTok)
       security:
         - bearerAuth: []
       parameters:
@@ -92,7 +92,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [instagram, facebook]
+            enum: [instagram, facebook, tiktok]
         - in: query
           name: accountId
           description: >
@@ -178,6 +178,9 @@ components:
           type: string
           nullable: true
         fb_page_id:
+          type: string
+          nullable: true
+        tiktok_username:
           type: string
           nullable: true
 
@@ -382,6 +385,56 @@ components:
                   created_time:
                     type: string
                     nullable: true
+        tiktok:
+          type: object
+          nullable: true
+          description: TikTok KPI data (returned when platform=tiktok)
+          properties:
+            username:
+              type: string
+              nullable: true
+            display_name:
+              type: string
+              nullable: true
+            avatar_url:
+              type: string
+              nullable: true
+            followers:
+              type: integer
+            following:
+              type: integer
+            likes:
+              type: integer
+              description: Total likes received across all videos
+            video_count:
+              type: integer
+            videos:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  title:
+                    type: string
+                    nullable: true
+                  cover_image_url:
+                    type: string
+                    nullable: true
+                  share_url:
+                    type: string
+                    nullable: true
+                  view_count:
+                    type: integer
+                  like_count:
+                    type: integer
+                  comment_count:
+                    type: integer
+                  share_count:
+                    type: integer
+                  create_time:
+                    type: integer
+                    description: Unix timestamp of when the video was posted
 
     Prospect:
       type: object

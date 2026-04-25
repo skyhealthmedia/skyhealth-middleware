@@ -8,6 +8,7 @@ import path from 'path';
 import { ENV } from './env';
 import { ga4Handler } from './svc_ga4';
 import { getSocialKPI } from './svc_social';
+import { getTikTokKPI, exchangeTikTokCode } from './svc_tiktok';
 import clients from './clients';
 
 const app = Fastify({ logger: true });
@@ -22,7 +23,8 @@ async function buildApp() {
     if (
       req.url.startsWith('/health') ||
       req.url.startsWith('/openapi.yaml') ||
-      req.url.startsWith('/tiktok-developers-site-verification')
+      req.url.startsWith('/tiktok-developers-site-verification') ||
+      req.url.startsWith('/auth/tiktok')
     ) {
       return;
     }
@@ -67,6 +69,7 @@ async function buildApp() {
       ga4_property_id: client.ga4_property_id,
       ig_account_id: client.ig_account_id || null,
       fb_page_id: client.fb_page_id || null,
+      tiktok_username: client.tiktok_username || null,
     }));
 
     return reply.send(list);
@@ -97,13 +100,42 @@ async function buildApp() {
 
       if (
         !platformRaw ||
-        (platformRaw !== 'instagram' && platformRaw !== 'facebook')
+        (platformRaw !== 'instagram' && platformRaw !== 'facebook' && platformRaw !== 'tiktok')
       ) {
         return reply
           .code(400)
-          .send({ error: 'invalid_platform', detail: "Use 'instagram' or 'facebook'." });
+          .send({ error: 'invalid_platform', detail: "Use 'instagram', 'facebook', or 'tiktok'." });
       }
 
+      if (clientKey && !clientConfig) {
+        return reply.code(404).send({
+          error: 'client_not_found',
+          detail: `No client registered with key '${clientKey}'. Use /clients to list available clients.`,
+        });
+      }
+
+      // --- TikTok branch ---
+      if (platformRaw === 'tiktok') {
+        const tiktokToken =
+          String(q.accessToken || '') ||
+          String(ENV.TIKTOK_ACCESS_TOKEN || '');
+
+        if (!tiktokToken) {
+          return reply.code(400).send({
+            error: 'missing_accessToken',
+            detail: 'Provide ?accessToken= or set TIKTOK_ACCESS_TOKEN env var. Use /auth/tiktok to authorize.',
+          });
+        }
+
+        const data = await getTikTokKPI(tiktokToken, { postLimit });
+        return reply.send({
+          client: clientConfig ? clientKey : undefined,
+          tiktok_username: clientConfig?.tiktok_username || null,
+          ...data,
+        });
+      }
+
+      // --- Instagram / Facebook branch ---
       // Resolve account ID: client config → ?accountId= → env defaults
       let accountId = String(q.accountId || '');
       if (!accountId && clientConfig) {
@@ -119,13 +151,6 @@ async function buildApp() {
         } else {
           accountId = ENV.DEFAULT_FB_ID || '758804137314076';
         }
-      }
-
-      if (clientKey && !clientConfig) {
-        return reply.code(404).send({
-          error: 'client_not_found',
-          detail: `No client registered with key '${clientKey}'. Use /clients to list available clients.`,
-        });
       }
 
       if (clientConfig && !accountId) {
@@ -161,6 +186,78 @@ async function buildApp() {
       return reply
         .code(500)
         .send({ error: 'social_kpi_failed', detail: err?.message || String(err) });
+    }
+  });
+
+  // --- TikTok OAuth ---
+  const TIKTOK_REDIRECT_URI = 'https://api.skyhealthmedia.com/auth/tiktok/callback';
+
+  // Step 1: Redirect user to TikTok authorization
+  app.get('/auth/tiktok', async (req: FastifyRequest, reply: FastifyReply) => {
+    const clientKey = ENV.TIKTOK_CLIENT_KEY;
+    if (!clientKey) {
+      return reply.code(500).send({ error: 'TIKTOK_CLIENT_KEY not configured' });
+    }
+
+    const scope = 'user.info.basic,user.info.stats,video.list';
+    const state = Math.random().toString(36).substring(2, 15);
+    const authUrl =
+      `https://www.tiktok.com/v2/auth/authorize/` +
+      `?client_key=${clientKey}` +
+      `&scope=${encodeURIComponent(scope)}` +
+      `&response_type=code` +
+      `&redirect_uri=${encodeURIComponent(TIKTOK_REDIRECT_URI)}` +
+      `&state=${state}`;
+
+    return reply.redirect(authUrl);
+  });
+
+  // Step 2: Handle callback — exchange code for token
+  app.get('/auth/tiktok/callback', async (req: FastifyRequest, reply: FastifyReply) => {
+    const q = req.query as Record<string, string>;
+    const code = q.code;
+    const error = q.error;
+
+    if (error) {
+      return reply.code(400).send({
+        error: 'tiktok_auth_denied',
+        detail: q.error_description || error,
+      });
+    }
+
+    if (!code) {
+      return reply.code(400).send({ error: 'missing_code' });
+    }
+
+    const clientKey = ENV.TIKTOK_CLIENT_KEY;
+    const clientSecret = ENV.TIKTOK_CLIENT_SECRET;
+    if (!clientKey || !clientSecret) {
+      return reply.code(500).send({ error: 'TikTok credentials not configured' });
+    }
+
+    try {
+      const tokenData = await exchangeTikTokCode(
+        code,
+        clientKey,
+        clientSecret,
+        TIKTOK_REDIRECT_URI
+      );
+
+      // Return the tokens — in production, store them securely
+      return reply.send({
+        success: true,
+        message: 'TikTok authorized! Save the access_token as TIKTOK_ACCESS_TOKEN env var in Render.',
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        open_id: tokenData.open_id,
+        expires_in: tokenData.expires_in,
+      });
+    } catch (err: any) {
+      req.log.error(err);
+      return reply.code(500).send({
+        error: 'token_exchange_failed',
+        detail: err?.message || String(err),
+      });
     }
   });
 
