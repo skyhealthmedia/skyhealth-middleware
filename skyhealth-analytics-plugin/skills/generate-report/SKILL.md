@@ -7,7 +7,7 @@ description: >
   comparison", or any request for GA4 / Instagram / Facebook / TikTok metrics.
   Pulls live data via the SkyHealth middleware API.
 metadata:
-  version: "0.2.1"
+  version: "0.2.2"
 ---
 
 # SkyHealth Analytic Agent — Report Generator
