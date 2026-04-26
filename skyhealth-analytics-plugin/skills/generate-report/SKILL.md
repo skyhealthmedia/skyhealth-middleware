@@ -7,7 +7,7 @@ description: >
   comparison", or any request for GA4 / Instagram / Facebook / TikTok metrics.
   Pulls live data via the SkyHealth middleware API.
 metadata:
-  version: "0.2.2"
+  version: "0.2.3"
 ---
 
 # SkyHealth Analytic Agent — Report Generator
@@ -83,6 +83,7 @@ Every report — chat or document — should follow this shape:
 4. **Social Media Performance** — per platform: followers, top posts, engagement, with notes on connected/unconnected accounts and TikTok approval status if relevant
 5. **What This Means for the Client** — short interpretation, not just data restatement
 6. **Recommended Next Steps** — concrete actions the client or the SkyHealth team can take
+7. **How SkyHealth Can Help** — for each major recommendation, name the SkyHealth service that delivers it (see Service Mapping below). This positions SkyHealth as the partner ready to execute, not just observe.
 
 ## Data Interpretation Guidelines
 
@@ -95,6 +96,29 @@ When analyzing the numbers:
 - Increasing TikTok views with low website traffic → opportunity to improve link-in-bio routing
 - High engagement rate on social but flat website traffic → content engages but doesn't convert
 - Sudden traffic spike from one source → check for campaign launch, press, or referral; flag for investigation rather than declaring victory
+
+## SkyHealth Service Mapping
+
+Use this table to map data insights to the service SkyHealth can offer. Frame each as a consultative offer, not a hard sell. Tone: "here's what your data shows, and here's how we can help you act on it."
+
+| Data signal | Recommended action | SkyHealth service to propose |
+|---|---|---|
+| Low form-conversion rate (high traffic, few submits) | Audit and redesign CTAs, contact forms, landing pages | **Conversion Rate Optimization (CRO) sprint** — UX audit, A/B testing, contact-form redesign |
+| Low/no UTM tracking on social posts | Set up attribution so social ROI is visible | **Attribution & Reporting upgrade** — UTM templates, GA4 dashboard build-out, monthly attribution review |
+| Low posting cadence on social | Increase to 3+ posts per week to maintain top-of-funnel | **Managed social content plan** — content production + posting calendar managed by the SkyHealth content team |
+| One platform underperforming relative to another (e.g. FB << IG) | Audit settings, audience, posting time | **Platform-specific strategy review** — paid promotion test, audience targeting refinement |
+| Strong organic search but flat paid/referral | Diversify acquisition channels | **Paid search + local listings management** — Google Ads pilot, local SEO maintenance retainer |
+| High-intent page traffic but low conversion | Strengthen the path from page view to action | **Lead capture optimization** — chat widget, lead magnets, landing page testing |
+| Service line getting traction but under-promoted | Build a dedicated campaign | **Service-line awareness campaign** — content series, paid amplification, dedicated landing page |
+| Bilingual content outperforming English-only | Double down on bilingual production | **Expanded bilingual content production** — increased ES/EN content output |
+| TikTok pending approval | Prepare content backlog for launch day | **TikTok launch package** — content adaptation from existing IG inventory, link-in-bio strategy, posting cadence setup |
+| Awareness-day posts outperforming routine posts | Build an annual content calendar around health awareness days | **Annual content calendar service** — health-awareness-day-driven content planning |
+
+When generating the "How SkyHealth Can Help" section, pick the 3–5 services that map most directly to that report's recommendations. Don't list everything — prioritize the highest-leverage opportunities for that specific client. Phrase each as a soft offer:
+
+- "We can take this on through our [service name]. Happy to scope it on a quick call."
+- "This is something the SkyHealth content team manages for several clients — let's discuss expanding your engagement."
+- "Worth a 15-minute conversation about adding [service] to your current plan."
 
 ## Tone and Style
 

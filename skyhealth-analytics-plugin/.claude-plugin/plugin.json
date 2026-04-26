@@ -1,7 +1,7 @@
 {
   "name": "skyhealth-analytics",
-  "version": "0.2.2",
-  "description": "SkyHealth Analytic Agent — GA4 and social media reporting assistant for SkyHealth Media. Connects to the SkyHealth middleware API for live analytics and client report generation.",
+  "version": "0.2.3",
+  "description": "SkyHealth Analytic Agent — GA4 and social media reporting assistant for SkyHealth Media. Connects to the SkyHealth middleware API for live analytics and client report generation, with built-in service-expansion recommendations.",
   "author": {
     "name": "SkyHealth Media"
   }

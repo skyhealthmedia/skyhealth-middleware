@@ -141,7 +141,7 @@ function handleMessage(msg) {
         result: {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'skyhealth-api', version: '0.2.2' },
+          serverInfo: { name: 'skyhealth-api', version: '0.2.3' },
         },
       });
       break;
