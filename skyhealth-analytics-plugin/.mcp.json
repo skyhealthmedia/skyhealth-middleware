@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "skyhealth-api": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/servers/skyhealth-api.mjs"],
+      "env": {
+        "SKYHEALTH_API_URL": "https://api.skyhealthmedia.com",
+        "SKYHEALTH_BEARER_TOKEN": "${SKYHEALTH_BEARER_TOKEN}"
+      }
+    }
+  }
+}
