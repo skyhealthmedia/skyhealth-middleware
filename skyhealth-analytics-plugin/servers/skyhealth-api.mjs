@@ -126,8 +126,8 @@ const rl = createInterface({ input: process.stdin, terminal: false });
 let buffer = '';
 
 function send(msg) {
-  const json = JSON.stringify(msg);
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(json)}\r\n\r\n${json}`);
+  // Modern MCP stdio transport: newline-delimited JSON-RPC, one message per line.
+  process.stdout.write(JSON.stringify(msg) + '\n');
 }
 
 function handleMessage(msg) {
@@ -141,7 +141,7 @@ function handleMessage(msg) {
         result: {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'skyhealth-api', version: '0.1.0' },
+          serverInfo: { name: 'skyhealth-api', version: '0.2.1' },
         },
       });
       break;
